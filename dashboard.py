@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 from datetime import datetime
+
+# ... el resto de tu código ...
 
 # Intenta importar matplotlib pero con respaldo
 try:
@@ -61,6 +66,24 @@ if MATPLOTLIB_AVAILABLE:
         st.error(f"Error con matplotlib: {e}")
 else:
     st.info("📊 Para ver gráficos con matplotlib, instala la dependencia")
+
+st.header("🌊 Gráfico con Seaborn (Avanzado)")
+try:
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Prepara datos para el heatmap
+    heatmap_data = datos_prueba[['Ventas B', 'Producción B', 'Promedio General']]
+    
+    # Crea heatmap con seaborn
+    sns.heatmap(heatmap_data.T, annot=True, fmt='.2f', cmap='RdYlGn', 
+                center=3.0, ax=ax)
+    ax.set_title('Mapa de Calor - Prueba Seaborn')
+    
+    st.pyplot(fig)
+    st.success("✅ ¡Seaborn funciona perfectamente!")
+    
+except Exception as e:
+    st.warning(f"Seaborn no disponible todavía: {e}")
 
 # Diagnóstico
 with st.expander("🔍 Diagnóstico de dependencias"):
