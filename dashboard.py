@@ -1,4 +1,5 @@
 import streamlit as st
+import matplotlib.pyplot as plt 
 import pandas as pd
 from datetime import datetime
 
@@ -37,5 +38,17 @@ with col3:
 # Gráfico simple con Streamlit nativo (sin matplotlib)
 st.header("Gráfico Simple")
 st.bar_chart(datos_prueba['Promedio General'])
+
+st.header("Primer gráfico con Matplotlib")
+try:
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.bar(datos_prueba.index, datos_prueba['Promedio General'], color='lightblue')
+    ax.set_title('Mi Primer Gráfico con Matplotlib')
+    ax.set_ylabel('Puntuación')
+    ax.tick_params(axis='x', rotation=45)
+    st.pyplot(fig)
+    st.success("✅ Matplotlib funciona perfectamente!")
+except Exception as e:
+    st.warning(f"⚠️ Matplotlib no está disponible: {e}")
 
 st.success("✅ ¡App funcionando correctamente! Ahora puedes agregar matplotlib gradualmente.")
