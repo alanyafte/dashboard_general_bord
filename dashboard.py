@@ -133,9 +133,17 @@ def obtener_datos_actualizados():
 datos = obtener_datos_actualizados()
 
 if datos is not None:
-    # Mostrar última actualización
-    ultima_actualizacion_str = datos.get('ultima_actualizacion', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    st.sidebar.success(f"✅ Última actualización: {ultima_actualizacion_str}")
+    # Mostrar última actualización (manejo seguro)
+    try:
+        ultima_actualizacion = datos.get('ultima_actualizacion')
+        if isinstance(ultima_actualizacion, pd.Series):
+            ultima_str = ultima_actualizacion.iloc[0]
+        else:
+            ultima_str = ultima_actualizacion if ultima_actualizacion else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        st.sidebar.success(f"✅ Última actualización: {ultima_str}")
+    except:
+        st.sidebar.success(f"✅ Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # --- GRÁFICO COMPARATIVO ---
     st.header("Comparación entre Empresas B y C")
