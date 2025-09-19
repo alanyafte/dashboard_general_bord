@@ -129,6 +129,58 @@ def obtener_datos_actualizados():
         st.error(f"Error al obtener datos: {e}")
         return None
 
+# --- FILTROS INTERACTIVOS ---
+if datos is not None:
+    st.sidebar.header("🔍 Filtros Avanzados")
+    
+    # 1. Filtro por rango de puntuación
+    min_val = float(datos.select_dtypes(include=[np.number]).min().min())
+    max_val = float(datos.select_dtypes(include=[np.number]).max().max())
+    
+    rango_puntuacion = st.sidebar.slider(
+        "Rango de Puntuación",
+        min_value=min_val,
+        max_value=max_val,
+        value=(min_val, max_val),
+        step=0.1
+    )
+    
+    # 2. Filtro por secciones (multiselect)
+    secciones_seleccionadas = st.sidebar.multiselect(
+        "Secciones a mostrar",
+        options=datos.index.tolist(),
+        default=datos.index.tolist()
+    )
+    
+    # 3. Filtro por departamentos
+    departamentos = ['Ventas B', 'Producción B', 'Ventas C', 'Producción C', 'Promedio General']
+    deptos_seleccionados = st.sidebar.multiselect(
+        "Departamentos/Métricas",
+        options=departamentos,
+        default=departamentos
+    )
+    
+    # Aplicar filtros
+    datos_filtrados = datos.copy()
+    
+    # Filtrar por secciones
+    if secciones_seleccionadas:
+        datos_filtrados = datos_filtrados.loc[secciones_seleccionadas]
+    
+    # Filtrar por departamentos
+    if deptos_seleccionados:
+        datos_filtrados = datos_filtrados[deptos_seleccionados]
+    
+    # Filtrar por rango de puntuación (para columnas numéricas)
+    for col in datos_filtrados.select_dtypes(include=[np.number]).columns:
+        datos_filtrados = datos_filtrados[
+            (datos_filtrados[col] >= rango_puntuacion[0]) & 
+            (datos_filtrados[col] <= rango_puntuacion[1])
+        ]
+    
+    # Usar datos filtrados en los gráficos
+    datos = datos_filtrados
+
 # --- INTERFAZ PRINCIPAL ---
 datos = obtener_datos_actualizados()
 
