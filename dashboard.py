@@ -1,11 +1,18 @@
 import streamlit as st
-import matplotlib.pyplot as plt 
 import pandas as pd
 from datetime import datetime
 
+# Intenta importar matplotlib pero con respaldo
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    st.warning("⚠️ Matplotlib no está instalado. Usando gráficos nativos de Streamlit.")
+
 st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
 st.title("📊 Dashboard de Clima Laboral")
-st.markdown("**Versión inicial - Sin gráficos**")
+st.markdown("**Versión inicial - Probando matplotlib**")
 
 # Datos de prueba
 secciones = [
@@ -35,20 +42,39 @@ with col2:
 with col3:
     st.metric("Mínima Valoración", f"{datos_prueba['Promedio General'].min():.2f}")
 
-# Gráfico simple con Streamlit nativo (sin matplotlib)
-st.header("Gráfico Simple")
+# Gráfico simple con Streamlit nativo (siempre funciona)
+st.header("Gráfico Simple (Streamlit)")
 st.bar_chart(datos_prueba['Promedio General'])
 
-st.header("Primer gráfico con Matplotlib")
-try:
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.bar(datos_prueba.index, datos_prueba['Promedio General'], color='lightblue')
-    ax.set_title('Mi Primer Gráfico con Matplotlib')
-    ax.set_ylabel('Puntuación')
-    ax.tick_params(axis='x', rotation=45)
-    st.pyplot(fig)
-    st.success("✅ Matplotlib funciona perfectamente!")
-except Exception as e:
-    st.warning(f"⚠️ Matplotlib no está disponible: {e}")
+# Gráfico con matplotlib (solo si está disponible)
+if MATPLOTLIB_AVAILABLE:
+    st.header("Gráfico con Matplotlib")
+    try:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.bar(datos_prueba.index, datos_prueba['Promedio General'], color='lightblue', alpha=0.7)
+        ax.set_title('Gráfico con Matplotlib (Si se instala)')
+        ax.set_ylabel('Puntuación')
+        ax.tick_params(axis='x', rotation=45)
+        st.pyplot(fig)
+        st.success("✅ ¡Matplotlib funciona perfectamente!")
+    except Exception as e:
+        st.error(f"Error con matplotlib: {e}")
+else:
+    st.info("📊 Para ver gráficos con matplotlib, instala la dependencia")
 
-st.success("✅ ¡App funcionando correctamente! Ahora puedes agregar matplotlib gradualmente.")
+# Diagnóstico
+with st.expander("🔍 Diagnóstico de dependencias"):
+    st.write(f"**Matplotlib disponible:** {MATPLOTLIB_AVAILABLE}")
+    if not MATPLOTLIB_AVAILABLE:
+        st.write("""
+        **Para instalar matplotlib:**
+        1. Crea un archivo `requirements.txt` con:
+        ```
+        streamlit>=1.28.0
+        pandas>=1.5.0
+        matplotlib>=3.6.0
+        ```
+        2. Espera a que Streamlit Cloud reinstale las dependencias
+        """)
+
+st.success("✅ ¡App funcionando correctamente! El error era esperado.")
