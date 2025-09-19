@@ -33,7 +33,7 @@ def conectar_google_sheets():
         st.error(f"❌ Error de conexión: {e}")
         return None
 
-# --- FUNCIÓN PARA OBTENER DATOS REALES ---
+# --- FUNCIÓN PARA OBTENER DATOS REALES CON DEBUG ---
 @st.cache_data(ttl=3600)
 def obtener_datos_reales():
     gc = conectar_google_sheets()
@@ -41,26 +41,50 @@ def obtener_datos_reales():
         return None
     
     try:
+        st.sidebar.info("🔗 Intentando conectar con Google Sheets...")
+        
         url = "https://docs.google.com/spreadsheets/d/1dBubiABkbfpCGxn3b7eLC12DyM-R9N0XdxI93gL2Bv0/edit#gid=0"
         sh = gc.open_by_url(url)
+        st.sidebar.success("✅ Hoja de cálculo encontrada")
         
-        # Leer las pestañas
-        ventas_b = pd.DataFrame(sh.worksheet("Ventas").get_all_records())
-        produccion_b = pd.DataFrame(sh.worksheet("Produccion").get_all_records())
-        ventas_c = pd.DataFrame(sh.worksheet("Ventas_c").get_all_records())
-        produccion_c = pd.DataFrame(sh.worksheet("Produccion_c").get_all_records())
+        # Listar todas las pestañas disponibles para debug
+        todas_hojas = [worksheet.title for worksheet in sh.worksheets()]
+        st.sidebar.write(f"📋 Hojas disponibles: {', '.join(todas_hojas)}")
         
-        st.sidebar.success("✅ Datos reales cargados")
-        return {
-            'ventas_b': ventas_b,
-            'produccion_b': produccion_b,
-            'ventas_c': ventas_c,
-            'produccion_c': produccion_c
-        }
+        # Leer las pestañas con manejo de errores individual
+        datos = {}
+        hojas_requeridas = ["Ventas", "Produccion", "Ventas_c", "Produccion_c"]
+        
+        for hoja in hojas_requeridas:
+            try:
+                if hoja in todas_hojas:
+                    worksheet = sh.worksheet(hoja)
+                    datos[hoja] = pd.DataFrame(worksheet.get_all_records())
+                    st.sidebar.success(f"✅ {hoja}: {datos[hoja].shape[0]} filas")
+                else:
+                    st.sidebar.error(f"❌ Pestaña '{hoja}' no encontrada")
+                    return None
+            except Exception as e:
+                st.sidebar.error(f"❌ Error leyendo {hoja}: {str(e)}")
+                return None
+        
+        st.sidebar.success("✅ Todas las pestañas leídas correctamente")
+        return datos
+        
     except Exception as e:
-        st.error(f"❌ Error leyendo datos: {e}")
+        st.error(f"❌ Error general: {str(e)}")
+        # Mostrar más detalles del error
+        with st.expander("🔍 Detalles del error"):
+            st.write(f"**Tipo de error:** {type(e).__name__}")
+            st.write(f"**Mensaje:** {str(e)}")
+            st.write("""
+            **Posibles soluciones:**
+            1. Verifica que la URL de la hoja sea correcta
+            2. Asegúrate que el service account tenga acceso a la hoja
+            3. Revisa que los nombres de las pestañas sean exactos
+            """)
         return None
-
+        
 # --- CONFIGURACIÓN STREAMLIT ---
 st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
 st.title("📊 Dashboard de Clima Laboral")
@@ -68,6 +92,28 @@ st.markdown("**Datos en tiempo real desde Google Sheets**")
 
 # --- OBTENER DATOS (reales o de prueba) ---
 datos_reales = obtener_datos_reales() if GSHEETS_AVAILABLE else None
+# --- DIAGNÓSTICO DE CONEXIÓN ---
+with st.sidebar:
+    st.header("🔧 Diagnóstico de Conexión")
+    
+    if GSHEETS_AVAILABLE:
+        st.success("✅ Librerías de Google instaladas")
+        
+        if 'gcp_service_account' in st.secrets:
+            st.success("✅ Credenciales encontradas en Secrets")
+            
+            # Mostrar email del service account para compartir la hoja
+            try:
+                creds_info = st.secrets["gcp_service_account"]
+                client_email = creds_info.get("client_email", "No encontrado")
+                st.info(f"📧 Service Account: {client_email}")
+                st.write("**Comparte tu Google Sheets con este email**")
+            except:
+                st.warning("⚠️ No se pudo leer el email del service account")
+        else:
+            st.error("❌ No hay credenciales en Secrets")
+    else:
+        st.error("❌ Librerías de Google no instaladas")
 
 if datos_reales:
     st.sidebar.success("📊 Usando datos REALES de Google Sheets")
@@ -185,5 +231,7 @@ with st.expander("🔍 Diagnóstico de dependencias"):
         ```
         2. Espera a que Streamlit Cloud reinstale las dependencias
         """)
+
+
 
 st.success("✅ ¡App funcionando correctamente! El error era esperado.")
