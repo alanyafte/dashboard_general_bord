@@ -121,7 +121,7 @@ def obtener_datos_actualizados():
 
         # Unir todo
         resultado_final_total = resultado_final.join(desv_ventas_b).join(desv_produccion_b).join(desv_ventas_c).join(desv_produccion_c)
-        resultado_final_total['ultima_actualizacion'] = datetime.now()
+        resultado_final_total['ultima_actualizacion'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         return resultado_final_total
         
@@ -134,8 +134,8 @@ datos = obtener_datos_actualizados()
 
 if datos is not None:
     # Mostrar última actualización
-    ultima_actualizacion = datos.get('ultima_actualizacion', datetime.now())
-    st.sidebar.success(f"✅ Última actualización: {ultima_actualizacion.strftime('%Y-%m-%d %H:%M:%S')}")
+    ultima_actualizacion_str = datos.get('ultima_actualizacion', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    st.sidebar.success(f"✅ Última actualización: {ultima_actualizacion_str}")
     
     # --- GRÁFICO COMPARATIVO ---
     st.header("Comparación entre Empresas B y C")
