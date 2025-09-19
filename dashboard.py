@@ -330,7 +330,8 @@ else:
 
 # Mostrar datos en tabla
 with st.expander("📊 Ver Datos Completos"):
-    st.dataframe(datos.style.format("{:.2f}"))
+    columnas_numericas = [col for col in datos.columns if col != 'ultima_actualizacion']
+    st.dataframe(datos.style.format({col: "{:.2f}" for col in columnas_numericas}))
 
     # Botón de descarga
     csv = datos.to_csv(index=True)
