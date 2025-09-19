@@ -129,7 +129,38 @@ def obtener_datos_actualizados():
         st.error(f"Error al obtener datos: {e}")
         return None
 
-# --- FILTROS INTERACTIVOS ---
+
+# --- INTERFAZ PRINCIPAL ---
+datos = obtener_datos_actualizados()
+
+if datos is not None:
+    # Mostrar última actualización (manejo seguro)
+    try:
+        ultima_actualizacion = datos.get('ultima_actualizacion')
+        if isinstance(ultima_actualizacion, pd.Series):
+            ultima_str = ultima_actualizacion.iloc[0]
+        else:
+            ultima_str = ultima_actualizacion if ultima_actualizacion else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        st.sidebar.success(f"✅ Última actualización: {ultima_str}")
+    except:
+        st.sidebar.success(f"✅ Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # --- GRÁFICO COMPARATIVO ---
+    st.header("Comparación entre Empresas B y C")
+    comparativo_empresas = datos[["Promedio Empresa B", "Promedio Empresa C"]].copy()
+    
+    fig1, ax1 = plt.subplots(figsize=(12, 6))
+    comparativo_empresas.plot(kind='bar', ax=ax1)
+    ax1.set_title('Comparación de Satisfacción Laboral entre Empresas B y C')
+    ax1.set_ylabel('Puntuación Promedio')
+    ax1.set_xlabel('Secciones')
+    ax1.tick_params(axis='x', rotation=45)
+    ax1.legend(title='Empresa')
+    plt.tight_layout()
+    st.pyplot(fig1)
+
+    # --- FILTROS INTERACTIVOS ---
 if datos is not None:
     st.sidebar.header("🔍 Filtros Avanzados")
     
@@ -181,36 +212,10 @@ if datos is not None:
     # Usar datos filtrados en los gráficos
     datos = datos_filtrados
 
-# --- INTERFAZ PRINCIPAL ---
-datos = obtener_datos_actualizados()
-
-if datos is not None:
-    # Mostrar última actualización (manejo seguro)
-    try:
-        ultima_actualizacion = datos.get('ultima_actualizacion')
-        if isinstance(ultima_actualizacion, pd.Series):
-            ultima_str = ultima_actualizacion.iloc[0]
-        else:
-            ultima_str = ultima_actualizacion if ultima_actualizacion else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        st.sidebar.success(f"✅ Última actualización: {ultima_str}")
-    except:
-        st.sidebar.success(f"✅ Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # --- GRÁFICO COMPARATIVO ---
-    st.header("Comparación entre Empresas B y C")
-    comparativo_empresas = datos[["Promedio Empresa B", "Promedio Empresa C"]].copy()
-    
-    fig1, ax1 = plt.subplots(figsize=(12, 6))
-    comparativo_empresas.plot(kind='bar', ax=ax1)
-    ax1.set_title('Comparación de Satisfacción Laboral entre Empresas B y C')
-    ax1.set_ylabel('Puntuación Promedio')
-    ax1.set_xlabel('Secciones')
-    ax1.tick_params(axis='x', rotation=45)
-    ax1.legend(title='Empresa')
-    plt.tight_layout()
-    st.pyplot(fig1)
 
+
+    
     # --- GRÁFICO DE PROMEDIOS ---
     st.header("Promedio General por Sección")
     
