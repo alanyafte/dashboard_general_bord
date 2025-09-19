@@ -102,14 +102,20 @@ with st.sidebar:
         if 'gcp_service_account' in st.secrets:
             st.success("✅ Credenciales encontradas en Secrets")
             
-            # Mostrar email del service account para compartir la hoja
+            # Mostrar email del service account
             try:
+                import json
                 creds_info = st.secrets["gcp_service_account"]
+                if isinstance(creds_info, str):
+                    creds_info = json.loads(creds_info)
+                
                 client_email = creds_info.get("client_email", "No encontrado")
-                st.info(f"📧 Service Account: {client_email}")
-                st.write("**Comparte tu Google Sheets con este email**")
-            except:
-                st.warning("⚠️ No se pudo leer el email del service account")
+                st.info(f"📧 **Service Account Email:**")
+                st.code(client_email)
+                st.warning("🚨 **¡COMPARTE tu Google Sheets con este email!**")
+                
+            except Exception as e:
+                st.error(f"Error leyendo credenciales: {e}")
         else:
             st.error("❌ No hay credenciales en Secrets")
     else:
