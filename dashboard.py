@@ -4,160 +4,144 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from datetime import datetime
+import traceback
+import json
+
+# --- CONFIGURACIÓN STREAMLIT ---
+st.set_page_config(page_title="Dashboard Clima Laboral - DEBUG", layout="wide")
+st.title("🔧 Dashboard de Clima Laboral - MODO DEBUG")
+st.markdown("**Diagnóstico completo de conexión**")
+
+# --- DIAGNÓSTICO INICIAL COMPLETO ---
+st.sidebar.header("🔍 DIAGNÓSTICO COMPLETO")
+
+# Verificar todas las dependencias
 try:
     import gspread
     from google.oauth2 import service_account
     GSHEETS_AVAILABLE = True
-except ImportError:
+    st.sidebar.success("✅ gspread y google-auth instalados")
+except ImportError as e:
     GSHEETS_AVAILABLE = False
-    st.warning("⚠️ Librerías de Google Sheets no instaladas")
+    st.sidebar.error(f"❌ Error imports: {e}")
 
-# --- FUNCIÓN PARA CONECTAR A GOOGLE SHEETS ---
-@st.cache_resource
-def conectar_google_sheets():
+# Verificar secrets
+if 'gcp_service_account' in st.secrets:
+    st.sidebar.success("✅ Secrets encontrados")
+    
+    # Mostrar información del service account
+    try:
+        creds_info = st.secrets["gcp_service_account"]
+        if isinstance(creds_info, str):
+            creds_info = json.loads(creds_info)
+        
+        client_email = creds_info.get("client_email", "No encontrado")
+        project_id = creds_info.get("project_id", "No encontrado")
+        
+        st.sidebar.info(f"📧 **Service Account:** {client_email}")
+        st.sidebar.info(f"🏢 **Project ID:** {project_id}")
+        
+    except Exception as e:
+        st.sidebar.error(f"❌ Error leyendo secrets: {e}")
+else:
+    st.sidebar.error("❌ NO hay secrets configurados")
+
+# --- FUNCIÓN DE CONEXIÓN DETALLADA ---
+def debug_conexion():
     if not GSHEETS_AVAILABLE:
         return None
+    
     try:
-        if 'gcp_service_account' not in st.secrets:
-            st.error("❌ No se encontraron credenciales en Secrets")
-            return None
-            
+        st.header("🔗 DEBUG DETALLADO DE CONEXIÓN")
+        
+        # 1. Crear credenciales
         creds = service_account.Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
+            scopes=['https://www.googleapis.com/auth/spreadsheets', 
+                   'https://www.googleapis.com/auth/drive']
         )
+        st.success("✅ Credenciales creadas correctamente")
+        
+        # 2. Autorizar
         gc = gspread.authorize(creds)
-        st.sidebar.success("✅ Conectado a Google Sheets")
-        return gc
-    except Exception as e:
-        st.error(f"❌ Error de conexión: {e}")
-        return None
-
-# --- FUNCIÓN PARA OBTENER DATOS REALES CON DEBUG ---
-@st.cache_data(ttl=3600)
-def obtener_datos_reales():
-    gc = conectar_google_sheets()
-    if gc is None:
-        return None
-    
-    try:
-        st.sidebar.info("🔗 Intentando conectar con Google Sheets...")
+        st.success("✅ Cliente de Google autorizado")
         
+        # 3. Intentar abrir la hoja
         url = "https://docs.google.com/spreadsheets/d/1dBubiABkbfpCGxn3b7eLC12DyM-R9N0XdxI93gL2Bv0/edit#gid=0"
-        sh = gc.open_by_url(url)
-        st.sidebar.success("✅ Hoja de cálculo encontrada")
         
-        # Listar todas las pestañas disponibles para debug
-        todas_hojas = [worksheet.title for worksheet in sh.worksheets()]
-        st.sidebar.write(f"📋 Hojas disponibles: {', '.join(todas_hojas)}")
+        st.write(f"🌐 **Intentando abrir URL:** {url}")
         
-        # Leer las pestañas con manejo de errores individual
-        datos = {}
-        hojas_requeridas = ["Ventas", "Produccion", "Ventas_c", "Produccion_c"]
-        
-        for hoja in hojas_requeridas:
-            try:
-                if hoja in todas_hojas:
-                    worksheet = sh.worksheet(hoja)
-                    datos[hoja] = pd.DataFrame(worksheet.get_all_records())
-                    st.sidebar.success(f"✅ {hoja}: {datos[hoja].shape[0]} filas")
-                else:
-                    st.sidebar.error(f"❌ Pestaña '{hoja}' no encontrada")
-                    return None
-            except Exception as e:
-                st.sidebar.error(f"❌ Error leyendo {hoja}: {str(e)}")
-                return None
-        
-        st.sidebar.success("✅ Todas las pestañas leídas correctamente")
-        return datos
-        
-    except Exception as e:
-        st.error(f"❌ Error general: {str(e)}")
-        # Mostrar más detalles del error
-        with st.expander("🔍 Detalles del error"):
-            st.write(f"**Tipo de error:** {type(e).__name__}")
-            st.write(f"**Mensaje:** {str(e)}")
-            st.write("""
-            **Posibles soluciones:**
-            1. Verifica que la URL de la hoja sea correcta
-            2. Asegúrate que el service account tenga acceso a la hoja
-            3. Revisa que los nombres de las pestañas sean exactos
-            """)
-        return None
-        
-# --- CONFIGURACIÓN STREAMLIT ---
-st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
-st.title("📊 Dashboard de Clima Laboral")
-st.markdown("**Datos en tiempo real desde Google Sheets**")
-
-# --- OBTENER DATOS (reales o de prueba) ---
-datos_reales = obtener_datos_reales() if GSHEETS_AVAILABLE else None
-# --- DIAGNÓSTICO DE CONEXIÓN ---
-with st.sidebar:
-    st.header("🔧 Diagnóstico de Conexión")
-    
-    if GSHEETS_AVAILABLE:
-        st.success("✅ Librerías de Google instaladas")
-        
-        if 'gcp_service_account' in st.secrets:
-            st.success("✅ Credenciales encontradas en Secrets")
+        try:
+            sh = gc.open_by_url(url)
+            st.success("✅ ¡HOJA ENCONTRADA Y ACCESIBLE!")
             
-            # Mostrar email del service account
-            try:
-                import json
-                creds_info = st.secrets["gcp_service_account"]
-                if isinstance(creds_info, str):
-                    creds_info = json.loads(creds_info)
-                
-                client_email = creds_info.get("client_email", "No encontrado")
-                st.info(f"📧 **Service Account Email:**")
-                st.code(client_email)
-                st.warning("🚨 **¡COMPARTE tu Google Sheets con este email!**")
-                
-            except Exception as e:
-                st.error(f"Error leyendo credenciales: {e}")
-        else:
-            st.error("❌ No hay credenciales en Secrets")
+            # 4. Listar todas las hojas
+            worksheets = sh.worksheets()
+            hojas_disponibles = [ws.title for ws in worksheets]
+            
+            st.write("📋 **Hojas disponibles en el documento:**")
+            for hoja in hojas_disponibles:
+                st.write(f"   - {hoja}")
+            
+            # 5. Verificar hojas requeridas
+            hojas_requeridas = ["Ventas", "Produccion", "Ventas_c", "Produccion_c"]
+            st.write("🔍 **Buscando hojas requeridas:**")
+            
+            for hoja in hojas_requeridas:
+                if hoja in hojas_disponibles:
+                    st.success(f"   ✅ {hoja} - ENCONTRADA")
+                    try:
+                        worksheet = sh.worksheet(hoja)
+                        datos = worksheet.get_all_records()
+                        st.success(f"   📊 {hoja}: {len(datos)} filas leídas")
+                    except Exception as e:
+                        st.error(f"   ❌ Error leyendo {hoja}: {str(e)}")
+                else:
+                    st.error(f"   ❌ {hoja} - NO ENCONTRADA")
+            
+            return True
+            
+        except gspread.SpreadsheetNotFound:
+            st.error("❌ HOJA NO ENCONTRADA - Verifica la URL")
+            st.warning("""
+            **Posibles soluciones:**
+            1. Verifica que la URL sea correcta
+            2. Asegúrate de haber compartido la hoja con el service account
+            3. El service account email es: **{}**
+            """.format(client_email))
+            
+        except gspread.exceptions.APIError as e:
+            st.error(f"❌ ERROR DE API: {str(e)}")
+            st.warning("""
+            **Error de permisos de Google API:**
+            1. Verifica que el Service Account tenga habilitadas las APIs
+            2. Ve a Google Cloud Console > APIs & Services > Enable APIs
+            3. Habilita: Google Sheets API y Google Drive API
+            """)
+            
+        except Exception as e:
+            st.error(f"❌ ERROR INESPERADO: {str(e)}")
+            st.text(traceback.format_exc())
+            
+    except Exception as e:
+        st.error(f"❌ ERROR EN CONEXIÓN: {str(e)}")
+        st.text(traceback.format_exc())
+    
+    return False
+
+# --- EJECUTAR DEBUG ---
+if st.button("🔄 EJECUTAR DIAGNÓSTICO COMPLETO", type="primary"):
+    conexion_exitosa = debug_conexion()
+    
+    if conexion_exitosa:
+        st.balloons()
+        st.success("🎉 ¡CONEXIÓN EXITOSA! Ahora puedes usar tu código original")
     else:
-        st.error("❌ Librerías de Google no instaladas")
+        st.error("❌ ¡FALLA EN LA CONEXIÓN! Revisa los mensajes arriba")
 
-if datos_reales:
-    st.sidebar.success("📊 Usando datos REALES de Google Sheets")
-    # Aquí procesarás los datos reales como en tu código original
-    # Por ahora solo mostramos que se conectó
-    st.info("✅ ¡Conexión a Google Sheets exitosa!")
-    st.write("Dimensión de los datos cargados:")
-    for key, df in datos_reales.items():
-        st.write(f"{key}: {df.shape[0]} filas x {df.shape[1]} columnas")
-else:
-    st.sidebar.warning("📋 Usando datos de PRUEBA")
-    # --- TUS DATOS DE PRUEBA ACTUALES ---
-    secciones = [
-        "Funciones laborales", "Entorno de trabajo", "Relaciones laborales",
-        "Compensación y beneficios", "Desarrollo profesional", 
-        "Liderazgo", "Cultura organizacional"
-    ]
+# --- DATOS DE PRUEBA (como fallback) ---
+st.header("📊 Datos de Prueba (Modo Seguro)")
 
-    datos_prueba = pd.DataFrame({
-        'Ventas B': [4.2, 3.8, 4.5, 3.2, 2.8, 3.5, 4.0],
-        'Producción B': [4.0, 3.6, 4.3, 3.0, 2.6, 3.3, 3.8],
-        'Promedio General': [4.1, 3.7, 4.4, 3.1, 2.7, 3.4, 3.9]
-    }, index=secciones)
-
-
-# Intenta importar matplotlib pero con respaldo
-try:
-    import matplotlib.pyplot as plt
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
-    st.warning("⚠️ Matplotlib no está instalado. Usando gráficos nativos de Streamlit.")
-
-st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
-st.title("📊 Dashboard de Clima Laboral")
-st.markdown("**Versión inicial - Probando matplotlib**")
-
-# Datos de prueba
 secciones = [
     "Funciones laborales", "Entorno de trabajo", "Relaciones laborales",
     "Compensación y beneficios", "Desarrollo profesional", 
@@ -170,74 +154,20 @@ datos_prueba = pd.DataFrame({
     'Promedio General': [4.1, 3.7, 4.4, 3.1, 2.7, 3.4, 3.9]
 }, index=secciones)
 
-# Interfaz solo con datos tabulares
-st.sidebar.success(f"✅ App funcionando - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.dataframe(datos_prueba.style.format("{:.2f}"))
 
-st.header("Datos en Tabla")
-st.dataframe(datos_prueba.style.format("{:.2f}").highlight_max(axis=0, color='#90EE90').highlight_min(axis=0, color='#FFCCCB'))
+# --- INSTRUCCIONES ---
+with st.expander("📋 INSTRUCCIONES PASO A PASO"):
+    st.write("""
+    1. **Haz clic en 'EJECUTAR DIAGNÓSTICO COMPLETO'**
+    2. **Revisa cada paso del diagnóstico**
+    3. **Si hay errores de permisos:**
+       - Ve a Google Cloud Console
+       - Habilita Google Sheets API y Google Drive API
+       - Comparte tu Sheets con el email del service account
+    4. **Si las hojas no se encuentran:**
+       - Verifica los nombres exactos de las pestañas
+    5. **Una vez funcione el diagnóstico, usa tu código original**
+    """)
 
-st.header("Estadísticas")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Promedio General", f"{datos_prueba['Promedio General'].mean():.2f}")
-with col2:
-    st.metric("Máxima Valoración", f"{datos_prueba['Promedio General'].max():.2f}")
-with col3:
-    st.metric("Mínima Valoración", f"{datos_prueba['Promedio General'].min():.2f}")
-
-# Gráfico simple con Streamlit nativo (siempre funciona)
-st.header("Gráfico Simple (Streamlit)")
-st.bar_chart(datos_prueba['Promedio General'])
-
-# Gráfico con matplotlib (solo si está disponible)
-if MATPLOTLIB_AVAILABLE:
-    st.header("Gráfico con Matplotlib")
-    try:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.bar(datos_prueba.index, datos_prueba['Promedio General'], color='lightblue', alpha=0.7)
-        ax.set_title('Gráfico con Matplotlib (Si se instala)')
-        ax.set_ylabel('Puntuación')
-        ax.tick_params(axis='x', rotation=45)
-        st.pyplot(fig)
-        st.success("✅ ¡Matplotlib funciona perfectamente!")
-    except Exception as e:
-        st.error(f"Error con matplotlib: {e}")
-else:
-    st.info("📊 Para ver gráficos con matplotlib, instala la dependencia")
-
-st.header("🌊 Gráfico con Seaborn (Avanzado)")
-try:
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    # Prepara datos para el heatmap
-    heatmap_data = datos_prueba[['Ventas B', 'Producción B', 'Promedio General']]
-    
-    # Crea heatmap con seaborn
-    sns.heatmap(heatmap_data.T, annot=True, fmt='.2f', cmap='RdYlGn', 
-                center=3.0, ax=ax)
-    ax.set_title('Mapa de Calor - Prueba Seaborn')
-    
-    st.pyplot(fig)
-    st.success("✅ ¡Seaborn funciona perfectamente!")
-    
-except Exception as e:
-    st.warning(f"Seaborn no disponible todavía: {e}")
-
-# Diagnóstico
-with st.expander("🔍 Diagnóstico de dependencias"):
-    st.write(f"**Matplotlib disponible:** {MATPLOTLIB_AVAILABLE}")
-    if not MATPLOTLIB_AVAILABLE:
-        st.write("""
-        **Para instalar matplotlib:**
-        1. Crea un archivo `requirements.txt` con:
-        ```
-        streamlit>=1.28.0
-        pandas>=1.5.0
-        matplotlib>=3.6.0
-        ```
-        2. Espera a que Streamlit Cloud reinstale las dependencias
-        """)
-
-
-
-st.success("✅ ¡App funcionando correctamente! El error era esperado.")
+st.warning("⚠️ Ejecuta el diagnóstico completo para ver el error exacto")
