@@ -1,79 +1,41 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime
 
-# --- CONFIGURACIÓN STREAMLIT ---
 st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
 st.title("📊 Dashboard de Clima Laboral")
-st.markdown("**Versión inicial para pruebas en Streamlit Cloud**")
+st.markdown("**Versión inicial - Sin gráficos**")
 
-# --- DATOS DE PRUEBA ---
-@st.cache_data(ttl=3600)
-def obtener_datos_prueba():
-    try:
-        secciones = [
-            "Funciones laborales", "Entorno de trabajo", "Relaciones laborales",
-            "Compensación y beneficios", "Desarrollo profesional", 
-            "Liderazgo", "Cultura organizacional"
-        ]
-        
-        datos_prueba = pd.DataFrame({
-            'Ventas B': [4.2, 3.8, 4.5, 3.2, 2.8, 3.5, 4.0],
-            'Producción B': [4.0, 3.6, 4.3, 3.0, 2.6, 3.3, 3.8],
-            'Ventas C': [4.1, 3.9, 4.4, 3.3, 2.9, 3.6, 4.1],
-            'Producción C': [3.9, 3.7, 4.2, 3.1, 2.7, 3.4, 3.9]
-        }, index=secciones)
-        
-        datos_prueba["Promedio General"] = datos_prueba.mean(axis=1)
-        datos_prueba['ultima_actualizacion'] = datetime.now()
-        
-        return datos_prueba
-        
-    except Exception as e:
-        st.error(f"Error: {e}")
-        return None
+# Datos de prueba
+secciones = [
+    "Funciones laborales", "Entorno de trabajo", "Relaciones laborales",
+    "Compensación y beneficios", "Desarrollo profesional", 
+    "Liderazgo", "Cultura organizacional"
+]
 
-# --- INTERFAZ PRINCIPAL ---
-datos = obtener_datos_prueba()
+datos_prueba = pd.DataFrame({
+    'Ventas B': [4.2, 3.8, 4.5, 3.2, 2.8, 3.5, 4.0],
+    'Producción B': [4.0, 3.6, 4.3, 3.0, 2.6, 3.3, 3.8],
+    'Promedio General': [4.1, 3.7, 4.4, 3.1, 2.7, 3.4, 3.9]
+}, index=secciones)
 
-if datos is not None:
-    st.sidebar.success(f"✅ Datos de prueba - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # Gráfico simple
-    st.header("Gráfico de Prueba")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    datos["Promedio General"].plot(kind='bar', ax=ax, color='lightblue')
-    ax.set_title('Promedio General por Sección')
-    ax.set_ylabel('Puntuación')
-    ax.set_xlabel('Secciones')
-    ax.tick_params(axis='x', rotation=45)
-    plt.tight_layout()
-    st.pyplot(fig)
+# Interfaz solo con datos tabulares
+st.sidebar.success(f"✅ App funcionando - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Estadísticas
-    st.header("Estadísticas")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Promedio", f"{datos['Promedio General'].mean():.2f}")
-    with col2:
-        st.metric("Mejor", datos['Promedio General'].idxmax())
-    with col3:
-        st.metric("Peor", datos['Promedio General'].idxmin())
+st.header("Datos en Tabla")
+st.dataframe(datos_prueba.style.format("{:.2f}").highlight_max(axis=0, color='#90EE90').highlight_min(axis=0, color='#FFCCCB'))
 
-    # Datos
-    st.header("Datos")
-    st.dataframe(datos.style.format("{:.2f}"))
+st.header("Estadísticas")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Promedio General", f"{datos_prueba['Promedio General'].mean():.2f}")
+with col2:
+    st.metric("Máxima Valoración", f"{datos_prueba['Promedio General'].max():.2f}")
+with col3:
+    st.metric("Mínima Valoración", f"{datos_prueba['Promedio General'].min():.2f}")
 
-else:
-    st.error("Error al cargar datos")
+# Gráfico simple con Streamlit nativo (sin matplotlib)
+st.header("Gráfico Simple")
+st.bar_chart(datos_prueba['Promedio General'])
 
-# --- SECCIÓN DE CONFIGURACIÓN ---
-with st.expander("🚀 Configuración para producción"):
-    st.write("""
-    **Para conectar con Google Sheets, agrega:**
-
-    1. **Secrets** en Streamlit Cloud (.streamlit/secrets.toml)
-    2. **Código de autenticación** gradualmente
-    3. **Funciones completas** paso a paso
-    """)
+st.success("✅ ¡App funcionando correctamente! Ahora puedes agregar matplotlib gradualmente.")
