@@ -3,25 +3,33 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-from google.colab import auth
-from google.auth import default
+from oauth2client.service_account import ServiceAccountCredentials
 
 def mostrar_dashboard_oee():
-    def inicializar_oee():
-        """Función para inicializar la conexión y datos OEE"""
-        try:
-            # Autenticación
-            auth.authenticate_user()
-            creds, _ = default()
-            gc = gspread.authorize(creds)
-            
-            # Abrir Google Sheet
-            sheet_id = "1VEI-eCZBUoAkwWbr8wNmA0fo4zdXXSPEGp5M-qyQD1E"
-            worksheet = gc.open_by_key(sheet_id).worksheet("Produccion")
-            
-            # Obtener datos
-            data = worksheet.get_all_values()
-            df_raw = pd.DataFrame(data[1:], columns=data[0])
+    try:
+        # ✅ NUEVA AUTENTICACIÓN PARA STREAMLIT CLOUD:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        # Usa los secrets de Streamlit
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        # El resto de tu código OEE igual...
+        sheet_id = st.secrets["gsheets"]["oee_sheet_id"]
+        worksheet = gc.open_by_key(sheet_id).worksheet("Produccion")
+        data = worksheet.get_all_values()
+        df_raw = pd.DataFrame(data[1:], columns=data[0])
             
             # Convertir columnas numéricas
             columnas_numericas = [
@@ -161,3 +169,6 @@ def mostrar_dashboard_oee():
         # Tabla de datos
         st.subheader("📋 Datos Detallados")
         st.dataframe(df_filtrado[["maquina", "codigo_pedido", "fecha_inic", "OEE", "availability", "performance", "quality"]])
+ 
+except Exception as e:
+        st.error(f"Error en el dashboard OEE: {e}")
