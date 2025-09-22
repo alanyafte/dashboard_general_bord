@@ -8,7 +8,7 @@ from modulo_oee import mostrar_dashboard_oee
     #page_title="Dashboard Integral",
     #page_icon="📊",
     #layout="wide"
-)
+#)
 
 # Sidebar para navegación
 st.sidebar.title("🌐 Navegación")
