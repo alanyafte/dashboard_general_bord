@@ -9,9 +9,8 @@ from datetime import datetime
 
 def mostrar_dashboard_clima_laboral():
     # --- CONFIGURACIÓN STREAMLIT ---
-    st.set_page_config(page_title="Dashboard Clima Laboral", layout="wide")
-    st.title("📊 Dashboard de Clima Laboral")
-    st.markdown("**Datos actualizados desde Google Sheets**")
+    st.header("👥 Dashboard de Clima Laboral")
+    st.caption("Datos actualizados desde Google Sheets")
     
     # --- AUTENTICACIÓN ---
     @st.cache_resource
