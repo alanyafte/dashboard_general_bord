@@ -311,7 +311,7 @@ if datos is not None:
     st.pyplot(fig6)
 
     # --- ESTADÍSTICAS ---
-   st.header("Estadísticas Resumen")
+    st.header("Estadísticas Resumen")
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -326,7 +326,7 @@ if datos is not None:
         st.cache_data.clear()
         st.rerun()
 
-else:
+    else:
     st.error("No se pudieron cargar los datos. Verifica la conexión.")
 
 # Mostrar datos en tabla
