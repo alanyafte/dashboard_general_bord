@@ -348,19 +348,53 @@ with st.expander("📊 Ver Datos Completos"):
         st.warning("No hay datos disponibles para mostrar.")
 
 
-    # --- GENERADOR DE REPORTES ---
+import streamlit as st
+from fpdf import FPDF
+import tempfile
+import os
+
+# --- GENERADOR DE REPORTES ---
 st.sidebar.header("📋 Generar Reporte")
 
 if st.sidebar.button("📄 Generar Reporte PDF"):
     with st.spinner("Generando reporte..."):
-        # Aquí iría el código para generar un PDF
-        st.success("✅ Reporte generado exitosamente")
-        st.sidebar.download_button(
-            label="⬇️ Descargar Reporte",
-            data="[Aquí irían los datos del PDF]",
-            file_name="reporte_clima_laboral.pdf",
-            mime="application/pdf"
-        )
+        try:
+            # Crear PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            
+            # Agregar contenido al PDF
+            pdf.cell(200, 10, txt="Reporte de Clima Laboral", ln=1, align='C')
+            pdf.ln(10)
+            
+            # Aquí puedes agregar más contenido dinámico
+            pdf.cell(200, 10, txt=f"Fecha: {st.session_state.get('fecha_consulta', 'N/A')}", ln=1)
+            pdf.cell(200, 10, txt=f"Total respuestas: {len(st.session_state.get('df_filtrado', []))}", ln=1)
+            
+            # Guardar PDF temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
+                pdf.output(tmpfile.name)
+                
+                # Leer el archivo PDF generado
+                with open(tmpfile.name, "rb") as file:
+                    pdf_data = file.read()
+                
+                # Limpiar archivo temporal
+                os.unlink(tmpfile.name)
+            
+            st.success("✅ Reporte generado exitosamente")
+            
+            # Botón de descarga
+            st.sidebar.download_button(
+                label="⬇️ Descargar Reporte",
+                data=pdf_data,
+                file_name="reporte_clima_laboral.pdf",
+                mime="application/pdf"
+            )
+            
+        except Exception as e:
+            st.error(f"Error al generar el PDF: {e}")
 
 # --- MODO OSCURO/CLARO ---
 modo_oscuro = st.sidebar.checkbox("🌙 Modo Oscuro")
