@@ -310,6 +310,7 @@ if datos is not None:
     plt.tight_layout()
     st.pyplot(fig6)
 
+
     # --- ESTADÍSTICAS ---
     st.header("Estadísticas Resumen")
     
@@ -326,19 +327,22 @@ if datos is not None:
         st.cache_data.clear()
         st.rerun()
 
-    else:
+else:  # ← ESTA LÍNEA DEBE ESTAR ALINEADA CON EL 'if datos is not None'
     st.error("No se pudieron cargar los datos. Verifica la conexión.")
 
-# Mostrar datos en tabla
+# Mostrar datos en tabla - ESTO DEBE ESTAR FUERA DEL BLOQUE IF/ELSE
 with st.expander("📊 Ver Datos Completos"):
-    columnas_numericas = [col for col in datos.columns if col != 'ultima_actualizacion']
-    st.dataframe(datos.style.format({col: "{:.2f}" for col in columnas_numericas}))
+    if datos is not None:
+        columnas_numericas = [col for col in datos.columns if col != 'ultima_actualizacion']
+        st.dataframe(datos.style.format({col: "{:.2f}" for col in columnas_numericas}))
 
-    # Botón de descarga
-    csv = datos.to_csv(index=True)
-    st.download_button(
-        label="📥 Descargar CSV",
-        data=csv,
-        file_name="clima_laboral.csv",
-        mime="text/csv"
-    )
+        # Botón de descarga
+        csv = datos.to_csv(index=True)
+        st.download_button(
+            label="📥 Descargar CSV",
+            data=csv,
+            file_name="clima_laboral.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("No hay datos disponibles para mostrar.")
