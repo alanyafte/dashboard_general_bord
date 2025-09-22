@@ -311,25 +311,23 @@ if datos is not None:
     st.pyplot(fig6)
 
     # --- ESTADÍSTICAS ---
-   # --- ESTADÍSTICAS INTERACTIVAS ---
-st.header("📈 Estadísticas Avanzadas")
+   st.header("Estadísticas Resumen")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Promedio General", f"{datos['Promedio General'].mean():.2f}")
+    with col2:
+        st.metric("Mejor Sección", f"{datos['Promedio General'].idxmax()} ({datos['Promedio General'].max():.2f})")
+    with col3:
+        st.metric("Peor Sección", f"{datos['Promedio General'].idxmin()} ({datos['Promedio General'].min():.2f})")
 
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Promedio General", f"{datos['Promedio General'].mean():.2f}")
-with col2:
-    st.metric("Máxima Valoración", f"{datos.select_dtypes(include=[np.number]).max().max():.2f}")
-with col3:
-    st.metric("Mínima Valoración", f"{datos.select_dtypes(include=[np.number]).min().min():.2f}")
-with col4:
-    st.metric("Variabilidad", f"{datos.select_dtypes(include=[np.number]).std().std():.2f}")
+    # Botón de actualización
+    if st.button("🔄 Actualizar Datos Ahora", type="primary"):
+        st.cache_data.clear()
+        st.rerun()
 
-# Selector de visualización
-tipo_grafico = st.radio(
-    "Tipo de visualización:",
-    ["Barras", "Líneas", "Heatmap", "Radar"],
-    horizontal=True
-)
+else:
+    st.error("No se pudieron cargar los datos. Verifica la conexión.")
 
 # Mostrar datos en tabla
 with st.expander("📊 Ver Datos Completos"):
