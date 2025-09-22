@@ -4,11 +4,10 @@ from modulo_oee import mostrar_dashboard_oee
 # from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion  # Para el futuro
 
 # Configuración de la página
-#st.set_page_config(
+#st.set_page_config
     #page_title="Dashboard Integral",
     #page_icon="📊",
     #layout="wide"
-#)
 
 # Sidebar para navegación
 st.sidebar.title("🌐 Navegación")
