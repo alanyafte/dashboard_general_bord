@@ -344,10 +344,10 @@ with st.expander("📊 Ver Datos Completos"):
     )
 
 
-# --- GENERADOR DE REPORTES ---
-st.sidebar.header("📋 Generar Reporte")
+    # --- GENERADOR DE REPORTES ---
+    st.sidebar.header("📋 Generar Reporte")
 
-if st.sidebar.button("📄 Generar Reporte PDF"):
+    if st.sidebar.button("📄 Generar Reporte PDF"):
     with st.spinner("Generando reporte..."):
         # Aquí iría el código para generar un PDF
         st.success("✅ Reporte generado exitosamente")
@@ -358,9 +358,9 @@ if st.sidebar.button("📄 Generar Reporte PDF"):
             mime="application/pdf"
         )
 
-# --- MODO OSCURO/CLARO ---
-modo_oscuro = st.sidebar.checkbox("🌙 Modo Oscuro")
-if modo_oscuro:
+    # --- MODO OSCURO/CLARO ---
+    modo_oscuro = st.sidebar.checkbox("🌙 Modo Oscuro")
+    if modo_oscuro:
     st.markdown("""
     <style>
     .stApp { background-color: #1E1E1E; color: white; }
