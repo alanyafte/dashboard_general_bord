@@ -362,11 +362,11 @@ if st.sidebar.button("📄 Generar Reporte PDF"):
             mime="application/pdf"
         )
 
-    # --- MODO OSCURO/CLARO ---
-    modo_oscuro = st.sidebar.checkbox("🌙 Modo Oscuro")
-    if modo_oscuro:
-        st.markdown("""
-        <style>
-        .stApp { background-color: #1E1E1E; color: white; }
-        </style>
-        """, unsafe_allow_html=True)
+# --- MODO OSCURO/CLARO ---
+modo_oscuro = st.sidebar.checkbox("🌙 Modo Oscuro")
+if modo_oscuro:
+    st.markdown("""
+    <style>
+    .stApp { background-color: #1E1E1E; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
