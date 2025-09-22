@@ -6,7 +6,6 @@ from modulo_oee import mostrar_dashboard_oee
 # Configuración de la página
 st.set_page_config(
     page_title="Dashboard Integral",
-    page_icon="📊",
     layout="wide"
 )
 
