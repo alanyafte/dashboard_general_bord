@@ -67,33 +67,25 @@ def mostrar_dashboard_oee():
        # ✅ MOSTRAR RESULTADOS PRINCIPALES
         st.header("🏭 Dashboard OEE")
         
-        # ✅ RESUMEN ESTADÍSTICO AL INICIO (NUEVO - AÑADIR ESTO)
-        st.subheader("📈 Resumen Estadístico Inicial")
+      # ✅ RESUMEN ESTADÍSTICO AL INICIO
+        st.subheader("📈 Resumen Estadístico")
         
         # Crear columnas para el resumen
-        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        col_res1, col_res2, col_res3 = st.columns(3)
         
         with col_res1:
-            # OEE de Máquina 3 específicamente
-            if 'Máquina 3' in oee_por_maquina.index:
-                oee_maquina3 = oee_por_maquina.loc['Máquina 3', 'OEE']
-                st.metric("OEE Máquina 3", f"{oee_maquina3:.2%}")
-            else:
-                st.metric("OEE Máquina 3", "No disponible")
-        
-        with col_res2:
-            # Total de registros
-            st.metric("Total Registros", len(df_raw))
-        
-        with col_res3:
             # Mejor OEE
             st.metric("Mejor OEE", 
                      f"{oee_por_maquina['OEE'].idxmax()}: {oee_por_maquina['OEE'].max():.2%}")
         
-        with col_res4:
+        with col_res2:
             # Peor OEE
             st.metric("Peor OEE", 
                      f"{oee_por_maquina['OEE'].idxmin()}: {oee_por_maquina['OEE'].min():.2%}")
+        
+        with col_res3:
+            # Total de registros
+            st.metric("Total Registros", len(df_raw))
         
         # Información adicional de máquinas disponibles
         st.info(f"🔧 **Máquinas en sistema:** {', '.join(oee_por_maquina.index.tolist())}")
