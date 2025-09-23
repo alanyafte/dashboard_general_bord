@@ -16,7 +16,7 @@ def mostrar_dashboard_clima_laboral():
     @st.cache_resource
     def get_credentials():
         return service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
+            st.secrets["gservice_account"],
             scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
     
