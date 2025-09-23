@@ -67,17 +67,6 @@ def mostrar_dashboard_oee():
        # ✅ MOSTRAR RESULTADOS PRINCIPALES
         st.header("🏭 Dashboard OEE")
         
-        # KPI's principales
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("OEE Promedio", f"{df_raw['OEE'].mean():.2%}")
-        with col2:
-            st.metric("Disponibilidad", f"{df_raw['availability'].mean():.2%}")
-        with col3:
-            st.metric("Rendimiento", f"{df_raw['performance'].mean():.2%}")
-        with col4:
-            st.metric("Calidad", f"{df_raw['quality'].mean():.2%}")
-        
         # ✅ RESUMEN ESTADÍSTICO AL INICIO (NUEVO - AÑADIR ESTO)
         st.subheader("📈 Resumen Estadístico Inicial")
         
