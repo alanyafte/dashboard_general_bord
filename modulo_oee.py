@@ -64,7 +64,7 @@ def mostrar_dashboard_oee():
         # ✅ OEE POR PEDIDO
         oee_por_pedido = df_raw.groupby("codigo_pedido")[["availability","performance","quality","OEE"]].mean()
         
-        # ✅ MOSTRAR RESULTADOS PRINCIPALES
+       # ✅ MOSTRAR RESULTADOS PRINCIPALES
         st.header("🏭 Dashboard OEE")
         
         # KPI's principales
@@ -77,6 +77,37 @@ def mostrar_dashboard_oee():
             st.metric("Rendimiento", f"{df_raw['performance'].mean():.2%}")
         with col4:
             st.metric("Calidad", f"{df_raw['quality'].mean():.2%}")
+        
+        # ✅ RESUMEN ESTADÍSTICO AL INICIO (NUEVO - AÑADIR ESTO)
+        st.subheader("📈 Resumen Estadístico Inicial")
+        
+        # Crear columnas para el resumen
+        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        
+        with col_res1:
+            # OEE de Máquina 3 específicamente
+            if 'Máquina 3' in oee_por_maquina.index:
+                oee_maquina3 = oee_por_maquina.loc['Máquina 3', 'OEE']
+                st.metric("OEE Máquina 3", f"{oee_maquina3:.2%}")
+            else:
+                st.metric("OEE Máquina 3", "No disponible")
+        
+        with col_res2:
+            # Total de registros
+            st.metric("Total Registros", len(df_raw))
+        
+        with col_res3:
+            # Mejor OEE
+            st.metric("Mejor OEE", 
+                     f"{oee_por_maquina['OEE'].idxmax()}: {oee_por_maquina['OEE'].max():.2%}")
+        
+        with col_res4:
+            # Peor OEE
+            st.metric("Peor OEE", 
+                     f"{oee_por_maquina['OEE'].idxmin()}: {oee_por_maquina['OEE'].min():.2%}")
+        
+        # Información adicional de máquinas disponibles
+        st.info(f"🔧 **Máquinas en sistema:** {', '.join(oee_por_maquina.index.tolist())}")
         
         # ✅ TABLA OEE POR MÁQUINA
         st.subheader("📊 OEE por Máquina")
@@ -191,18 +222,6 @@ def mostrar_dashboard_oee():
         plt.tight_layout()
         st.pyplot(fig5)
         
-        # ✅ RESUMEN ESTADÍSTICO
-        st.subheader("📈 Resumen Estadístico")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Mejor OEE Máquina", 
-                     f"{oee_por_maquina['OEE'].idxmax()}: {oee_por_maquina['OEE'].max():.2%}")
-        with col2:
-            st.metric("Peor OEE Máquina", 
-                     f"{oee_por_maquina['OEE'].idxmin()}: {oee_por_maquina['OEE'].min():.2%}")
-        with col3:
-            st.metric("Total Registros", len(df_raw))
         
         # ✅ DATOS CRUDOS (opcional)
         with st.expander("📋 Ver Datos Crudos"):
