@@ -1,9 +1,11 @@
 import gspread
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
 import numpy as np
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
 def mostrar_dashboard_produccion():
     try:
@@ -44,177 +46,256 @@ def limpiar_dataframe(df_raw):
     """Limpiar y procesar el dataframe"""
     df = df_raw.copy()
     
-    # Mostrar información del dataframe crudo
-    st.sidebar.info(f"📊 Datos crudos: {len(df)} registros, {len(df.columns)} columnas")
+    # Eliminar columna de correo electrónico que no interesa
+    if "Dirección de correo electrónico" in df.columns:
+        df = df.drop("Dirección de correo electrónico", axis=1)
     
-    # Limpiar espacios en nombres de columnas
+    # Limpiar espacios en nombres de columnas y valores
     df.columns = df.columns.str.strip()
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            df[col] = df[col].str.strip()
     
-    # Mostrar columnas disponibles para debugging
-    with st.expander("🔍 Ver columnas disponibles y datos crudos"):
-        st.write("**Columnas:**", list(df.columns))
-        st.write("**Primeras filas:**")
-        st.dataframe(df.head(10))
+    # Convertir Marca temporal a datetime
+    if "Marca temporal" in df.columns:
+        df["Marca temporal"] = pd.to_datetime(df["Marca temporal"], errors='coerce')
     
-    # Aquí puedes agregar más limpieza según tus columnas específicas
-    # Por ejemplo: convertir fechas, limpiar valores numéricos, etc.
+    # Convertir CANTIDAD a numérico
+    if "CANTIDAD" in df.columns:
+        df["CANTIDAD"] = pd.to_numeric(df["CANTIDAD"], errors='coerce')
+    
+    # Convertir PUNTADAS a numérico (si existe)
+    if "PUNTADAS" in df.columns:
+        df["PUNTADAS"] = pd.to_numeric(df["PUNTADAS"], errors='coerce')
+    
+    # Convertir MULTIPLOS a numérico (si existe)
+    if "MULTIPLOS" in df.columns:
+        df["MULTIPLOS"] = pd.to_numeric(df["MULTIPLOS"], errors='coerce')
     
     return df
+
+def aplicar_filtros(df):
+    """Aplicar filtros interactivos"""
+    df_filtrado = df.copy()
+    
+    st.sidebar.header("🔍 Filtros Avanzados")
+    
+    # Filtro por OPERADOR
+    if "OPERADOR" in df.columns:
+        operadores = sorted(df["OPERADOR"].unique())
+        operadores_seleccionados = st.sidebar.multiselect(
+            "Operadores:",
+            options=operadores,
+            default=operadores
+        )
+        if operadores_seleccionados:
+            df_filtrado = df_filtrado[df_filtrado["OPERADOR"].isin(operadores_seleccionados)]
+    
+    # Filtro por fecha (Marca temporal)
+    if "Marca temporal" in df.columns and not df_filtrado["Marca temporal"].isna().all():
+        fechas_disponibles = df_filtrado["Marca temporal"].dropna()
+        if not fechas_disponibles.empty:
+            fecha_min = fechas_disponibles.min().date()
+            fecha_max = fechas_disponibles.max().date()
+            
+            rango_fechas = st.sidebar.date_input(
+                "Rango de Fechas:",
+                value=(fecha_min, fecha_max),
+                min_value=fecha_min,
+                max_value=fecha_max
+            )
+            if len(rango_fechas) == 2:
+                mask = (df_filtrado["Marca temporal"].dt.date >= rango_fechas[0]) & \
+                       (df_filtrado["Marca temporal"].dt.date <= rango_fechas[1])
+                df_filtrado = df_filtrado[mask]
+    
+    # Filtro por TIPO DE PRENDA
+    if "TIPO DE PRENDA" in df.columns:
+        tipos_prenda = sorted(df_filtrado["TIPO DE PRENDA"].unique())
+        tipos_seleccionados = st.sidebar.multiselect(
+            "Tipo de Prenda:",
+            options=tipos_prenda,
+            default=tipos_prenda
+        )
+        if tipos_seleccionados:
+            df_filtrado = df_filtrado[df_filtrado["TIPO DE PRENDA"].isin(tipos_seleccionados)]
+    
+    # Filtro por DISEÑO
+    if "DISEÑO" in df.columns:
+        diseños = sorted(df_filtrado["DISEÑO"].unique())
+        diseños_seleccionados = st.sidebar.multiselect(
+            "Diseños:",
+            options=diseños,
+            default=diseños
+        )
+        if diseños_seleccionados:
+            df_filtrado = df_filtrado[df_filtrado["DISEÑO"].isin(diseños_seleccionados)]
+    
+    st.sidebar.info(f"📊 Registros filtrados: {len(df_filtrado)}")
+    
+    return df_filtrado
+
+def mostrar_metricas_principales(df):
+    """Mostrar métricas principales de producción"""
+    
+    if df.empty:
+        st.warning("No hay datos con los filtros aplicados")
+        return
+    
+    st.subheader("📈 Métricas de Producción")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_pedidos = len(df)
+        st.metric("Total de Pedidos", f"{total_pedidos:,}")
+    
+    with col2:
+        if "CANTIDAD" in df.columns:
+            total_unidades = df["CANTIDAD"].sum()
+            st.metric("Total Unidades", f"{total_unidades:,}")
+        else:
+            st.metric("Operadores Activos", df["OPERADOR"].nunique())
+    
+    with col3:
+        if "OPERADOR" in df.columns:
+            operadores_activos = df["OPERADOR"].nunique()
+            st.metric("Operadores Activos", operadores_activos)
+        else:
+            st.metric("Diseños Únicos", df["DISEÑO"].nunique())
+    
+    with col4:
+        if "Marca temporal" in df.columns and not df["Marca temporal"].isna().all():
+            ultima_actualizacion = df["Marca temporal"].max()
+            st.metric("Último Registro", ultima_actualizacion.strftime("%d/%m/%Y"))
+        else:
+            st.metric("Pedidos Únicos", df["#DE PEDIDO"].nunique())
+
+def mostrar_analisis_operadores(df):
+    """Análisis detallado por operador"""
+    
+    if df.empty or "OPERADOR" not in df.columns:
+        return
+    
+    st.subheader("👤 Análisis por Operador")
+    
+    # Métricas por operador
+    metricas_operador = df.groupby("OPERADOR").agg({
+        '#DE PEDIDO': 'count',
+        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
+    }).reset_index()
+    
+    metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades'] if 'CANTIDAD' in df.columns else ['Operador', 'Total Pedidos']
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**📊 Desempeño por Operador:**")
+        st.dataframe(metricas_operador, use_container_width=True)
+    
+    with col2:
+        # Gráfico de pedidos por operador
+        if len(metricas_operador) > 0:
+            fig = px.bar(
+                metricas_operador, 
+                x='Operador', 
+                y='Total Pedidos',
+                title="Pedidos por Operador",
+                color='Total Pedidos'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+def mostrar_analisis_pedidos(df):
+    """Análisis de pedidos y producción"""
+    
+    if df.empty:
+        return
+    
+    st.subheader("📦 Análisis de Pedidos")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Top diseños más producidos
+        if "DISEÑO" in df.columns:
+            top_diseños = df["DISEÑO"].value_counts().head(10).reset_index()
+            top_diseños.columns = ['Diseño', 'Cantidad']
+            
+            st.write("**🎨 Top Diseños:**")
+            st.dataframe(top_diseños, use_container_width=True)
+    
+    with col2:
+        # Tipos de prenda más comunes
+        if "TIPO DE PRENDA" in df.columns:
+            tipos_prenda = df["TIPO DE PRENDA"].value_counts().reset_index()
+            tipos_prenda.columns = ['Tipo de Prenda', 'Cantidad']
+            
+            fig = px.pie(
+                tipos_prenda, 
+                values='Cantidad', 
+                names='Tipo de Prenda',
+                title="Distribución por Tipo de Prenda"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+def mostrar_tendencias_temporales(df):
+    """Mostrar tendencias a lo largo del tiempo"""
+    
+    if df.empty or "Marca temporal" not in df.columns:
+        return
+    
+    st.subheader("📈 Tendencias Temporales")
+    
+    # Agrupar por fecha
+    df_temporal = df.copy()
+    df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
+    tendencias = df_temporal.groupby('Fecha').agg({
+        '#DE PEDIDO': 'count',
+        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
+    }).reset_index()
+    
+    if len(tendencias) > 1:
+        fig = px.line(
+            tendencias, 
+            x='Fecha', 
+            y='#DE PEDIDO',
+            title="Evolución de Pedidos por Día",
+            markers=True
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 def mostrar_interfaz_dashboard(df):
     """Interfaz principal del dashboard"""
     
     st.title("🏭 Dashboard de Producción")
     
-    # ✅ FILTROS EN SIDEBAR
-    st.sidebar.header("🔍 Filtros")
+    # Mostrar resumen rápido
+    st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
+    
+    # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
     
     # ✅ MÉTRICAS PRINCIPALES
-    st.header("📈 Métricas Principales")
     mostrar_metricas_principales(df_filtrado)
     
     # ✅ ANÁLISIS POR OPERADOR
-    st.header("👤 Análisis por Operador")
     mostrar_analisis_operadores(df_filtrado)
     
+    # ✅ ANÁLISIS DE PEDIDOS
+    mostrar_analisis_pedidos(df_filtrado)
+    
+    # ✅ TENDENCIAS TEMPORALES
+    mostrar_tendencias_temporales(df_filtrado)
+    
     # ✅ DATOS DETALLADOS
-    st.header("📋 Datos Detallados")
-    mostrar_datos_detallados(df_filtrado)
-
-def aplicar_filtros(df):
-    """Aplicar filtros interactivos"""
-    df_filtrado = df.copy()
+    st.subheader("📋 Datos Detallados de Producción")
+    st.dataframe(df_filtrado, use_container_width=True, height=400)
     
-    # Filtro por operador (si existe la columna)
-    if 'Operador' in df.columns or 'operador' in df.columns:
-        col_operador = 'Operador' if 'Operador' in df.columns else 'operador'
-        operadores = sorted(df[col_operador].unique())
-        operadores_seleccionados = st.sidebar.multiselect(
-            "Seleccionar Operadores:",
-            options=operadores,
-            default=operadores
-        )
-        if operadores_seleccionados:
-            df_filtrado = df_filtrado[df_filtrado[col_operador].isin(operadores_seleccionados)]
-    
-    # Filtro por fecha (si existe)
-    columnas_fecha = [col for col in df.columns if 'fecha' in col.lower() or 'date' in col.lower()]
-    if columnas_fecha:
-        col_fecha = columnas_fecha[0]
-        # Intentar convertir a datetime
-        try:
-            df_filtrado[col_fecha] = pd.to_datetime(df_filtrado[col_fecha], errors='coerce')
-            fechas_disponibles = df_filtrado[col_fecha].dropna()
-            if not fechas_disponibles.empty:
-                fecha_min = fechas_disponibles.min()
-                fecha_max = fechas_disponibles.max()
-                
-                rango_fechas = st.sidebar.date_input(
-                    "Rango de Fechas:",
-                    value=(fecha_min, fecha_max),
-                    min_value=fecha_min,
-                    max_value=fecha_max
-                )
-                if len(rango_fechas) == 2:
-                    mask = (df_filtrado[col_fecha] >= pd.Timestamp(rango_fechas[0])) & \
-                           (df_filtrado[col_fecha] <= pd.Timestamp(rango_fechas[1]))
-                    df_filtrado = df_filtrado[mask]
-        except:
-            pass
-    
-    st.sidebar.info(f"📊 Registros después de filtros: {len(df_filtrado)}")
-    
-    return df_filtrado
-
-def mostrar_metricas_principales(df):
-    """Mostrar métricas principales"""
-    
-    if df.empty:
-        st.warning("No hay datos con los filtros aplicados")
-        return
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_registros = len(df)
-        st.metric("Total de Registros", total_registros)
-    
-    with col2:
-        # Ejemplo: contar operadores únicos
-        col_operador = next((col for col in df.columns if 'operador' in col.lower()), None)
-        if col_operador:
-            operadores_unicos = df[col_operador].nunique()
-            st.metric("Operadores Únicos", operadores_unicos)
-        else:
-            st.metric("Registros Únicos", df.iloc[:, 0].nunique())
-    
-    with col3:
-        # Ejemplo: encontrar columna numérica para promediar
-        columnas_numericas = df.select_dtypes(include=[np.number]).columns
-        if len(columnas_numericas) > 0:
-            valor_promedio = df[columnas_numericas[0]].mean()
-            st.metric(f"Promedio {columnas_numericas[0]}", f"{valor_promedio:.2f}")
-        else:
-            st.metric("Datos Disponibles", "✓")
-    
-    with col4:
-        # Última fecha (si existe)
-        columnas_fecha = [col for col in df.columns if 'fecha' in col.lower()]
-        if columnas_fecha:
-            try:
-                ultima_fecha = pd.to_datetime(df[columnas_fecha[0]]).max()
-                st.metric("Última Actualización", ultima_fecha.strftime("%d/%m/%Y"))
-            except:
-                st.metric("Actualizado", "Reciente")
-
-def mostrar_analisis_operadores(df):
-    """Análisis específico por operador"""
-    
-    if df.empty:
-        return
-    
-    col_operador = next((col for col in df.columns if 'operador' in col.lower()), None)
-    
-    if col_operador:
-        # Métricas por operador
-        st.subheader("Desempeño por Operador")
-        
-        # Aquí puedes personalizar según tus métricas específicas
-        metricas_operador = df[col_operador].value_counts().reset_index()
-        metricas_operador.columns = ['Operador', 'Total Registros']
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**Registros por Operador:**")
-            st.dataframe(metricas_operador, use_container_width=True)
-        
-        with col2:
-            # Gráfico simple de barras
-            if len(metricas_operador) > 0:
-                fig, ax = plt.subplots()
-                ax.bar(metricas_operador['Operador'], metricas_operador['Total Registros'])
-                ax.set_title("Registros por Operador")
-                plt.xticks(rotation=45)
-                st.pyplot(fig)
-
-def mostrar_datos_detallados(df):
-    """Mostrar datos detallados"""
-    
-    if df.empty:
-        return
-    
-    st.subheader("Tabla de Datos Completa")
-    
-    # Mostrar dataframe con opción de descarga
-    st.dataframe(df, use_container_width=True, height=400)
-    
-    # Opción para descargar datos filtrados
-    csv = df.to_csv(index=False)
+    # Opción para descargar
+    csv = df_filtrado.to_csv(index=False, encoding='utf-8')
     st.download_button(
         label="📥 Descargar Datos Filtrados (CSV)",
         data=csv,
-        file_name="datos_produccion_filtrados.csv",
+        file_name="produccion_filtrada.csv",
         mime="text/csv"
     )
