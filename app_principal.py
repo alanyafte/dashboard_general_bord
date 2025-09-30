@@ -66,7 +66,7 @@ if not st.session_state[modulo_acceso_key]:
 else:
     # Módulo desbloqueado - mostrar contenido
     if modulo_seleccionado == "🏭 Producción":
-        mostrar_dashboard_oee()
+        mostrar_dashboard_produccion()
         
     elif modulo_seleccionado == "👥 Clima Laboral":
         mostrar_dashboard_clima_laboral()
