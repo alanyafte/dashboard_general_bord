@@ -1,6 +1,6 @@
 import streamlit as st
 from modulo_clima_laboral import mostrar_dashboard_clima_laboral
-from modulo_oee import mostrar_dashboard_oee
+from modulo_produccion import mostrar_dashboard_produccion
 
 # Configuración de la página
 st.set_page_config(
@@ -11,7 +11,7 @@ st.set_page_config(
 
 # Contraseñas por módulo (puedes cambiarlas fácilmente)
 CONTRASEÑAS_MODULOS = {
-    "🏭 OEE - Producción": "oee123",
+    "🏭 Producción": "produccion123",
     "👥 Clima Laboral": "clima456", 
     "😊 Satisfacción Cliente": "cliente789"
 }
@@ -25,7 +25,7 @@ for modulo in CONTRASEÑAS_MODULOS.keys():
 st.sidebar.title("🌐 Navegación")
 modulo_seleccionado = st.sidebar.radio(
     "Seleccionar Módulo:",
-    ["🏭 OEE - Producción", "👥 Clima Laboral", "😊 Satisfacción Cliente"]
+    ["🏭 Producción", "👥 Clima Laboral", "😊 Satisfacción Cliente"]
 )
 
 # Título principal
@@ -65,7 +65,7 @@ if not st.session_state[modulo_acceso_key]:
     
 else:
     # Módulo desbloqueado - mostrar contenido
-    if modulo_seleccionado == "🏭 OEE - Producción":
+    if modulo_seleccionado == "🏭 Producción":
         mostrar_dashboard_oee()
         
     elif modulo_seleccionado == "👥 Clima Laboral":
