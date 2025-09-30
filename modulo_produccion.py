@@ -9,28 +9,45 @@ from datetime import datetime
 
 def mostrar_dashboard_produccion():
     try:
-        # ✅ AUTENTICACIÓN
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        # ✅ BOTÓN DE REFRESH EN SIDEBAR
+        st.sidebar.header("🔄 Actualizar Datos")
+        if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
+            # Limpiar cache de datos para forzar recarga
+            if 'df_produccion' in st.session_state:
+                del st.session_state['df_produccion']
+            st.rerun()
         
-        service_account_info = {
-            "type": st.secrets["gservice_account"]["type"],
-            "project_id": st.secrets["gservice_account"]["project_id"],
-            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
-            "private_key": st.secrets["gservice_account"]["private_key"],
-            "client_email": st.secrets["gservice_account"]["client_email"],
-            "client_id": st.secrets["gservice_account"]["client_id"],
-            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
-            "token_uri": st.secrets["gservice_account"]["token_uri"]
-        }
+        st.sidebar.info("Última actualización: " + datetime.now().strftime("%H:%M:%S"))
         
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
-        gc = gspread.authorize(creds)
+        # ✅ AUTENTICACIÓN CON CACHE
+        @st.cache_data(ttl=300)  # Cache de 5 minutos
+        def cargar_datos_desde_sheets():
+            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+            
+            service_account_info = {
+                "type": st.secrets["gservice_account"]["type"],
+                "project_id": st.secrets["gservice_account"]["project_id"],
+                "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+                "private_key": st.secrets["gservice_account"]["private_key"],
+                "client_email": st.secrets["gservice_account"]["client_email"],
+                "client_id": st.secrets["gservice_account"]["client_id"],
+                "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+                "token_uri": st.secrets["gservice_account"]["token_uri"]
+            }
+            
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+            gc = gspread.authorize(creds)
+            
+            # ✅ CARGAR DATOS
+            sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+            worksheet = gc.open_by_key(sheet_id).worksheet("reporte_de_trabajo")
+            data = worksheet.get_all_values()
+            df_raw = pd.DataFrame(data[1:], columns=data[0])
+            
+            return df_raw
         
-        # ✅ CARGAR DATOS
-        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
-        worksheet = gc.open_by_key(sheet_id).worksheet("reporte_de_trabajo")
-        data = worksheet.get_all_values()
-        df_raw = pd.DataFrame(data[1:], columns=data[0])
+        # Cargar datos (usando cache)
+        df_raw = cargar_datos_desde_sheets()
         
         # ✅ LIMPIAR Y PROCESAR DATOS
         df = limpiar_dataframe(df_raw)
@@ -64,9 +81,12 @@ def limpiar_dataframe(df_raw):
     if "CANTIDAD" in df.columns:
         df["CANTIDAD"] = pd.to_numeric(df["CANTIDAD"], errors='coerce')
     
-    # Convertir PUNTADAS a numérico (si existe)
+    # Convertir PUNTADAS a numérico (MUY IMPORTANTE para la suma)
     if "PUNTADAS" in df.columns:
+        # Limpiar posibles textos o caracteres no numéricos
         df["PUNTADAS"] = pd.to_numeric(df["PUNTADAS"], errors='coerce')
+        # Eliminar NaN para evitar problemas en sumas
+        df["PUNTADAS"] = df["PUNTADAS"].fillna(0)
     
     # Convertir MULTIPLOS a numérico (si existe)
     if "MULTIPLOS" in df.columns:
@@ -165,27 +185,40 @@ def mostrar_metricas_principales(df):
             st.metric("Diseños Únicos", df["DISEÑO"].nunique())
     
     with col4:
-        if "Marca temporal" in df.columns and not df["Marca temporal"].isna().all():
+        # ✅ NUEVA MÉTRICA: SUMA TOTAL DE PUNTADAS
+        if "PUNTADAS" in df.columns:
+            total_puntadas = df["PUNTADAS"].sum()
+            st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
+        elif "Marca temporal" in df.columns and not df["Marca temporal"].isna().all():
             ultima_actualizacion = df["Marca temporal"].max()
             st.metric("Último Registro", ultima_actualizacion.strftime("%d/%m/%Y"))
         else:
             st.metric("Pedidos Únicos", df["#DE PEDIDO"].nunique())
 
 def mostrar_analisis_operadores(df):
-    """Análisis detallado por operador"""
+    """Análisis detallado por operador INCLUYENDO PUNTADAS"""
     
     if df.empty or "OPERADOR" not in df.columns:
         return
     
     st.subheader("👤 Análisis por Operador")
     
-    # Métricas por operador
+    # ✅ MÉTRICAS POR OPERADOR INCLUYENDO PUNTADAS
     metricas_operador = df.groupby("OPERADOR").agg({
         '#DE PEDIDO': 'count',
-        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
+        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
+        'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
     }).reset_index()
     
-    metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades'] if 'CANTIDAD' in df.columns else ['Operador', 'Total Pedidos']
+    # Ajustar nombres de columnas según qué métricas están disponibles
+    if 'CANTIDAD' in df.columns and 'PUNTADAS' in df.columns:
+        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades', 'Total Puntadas']
+    elif 'CANTIDAD' in df.columns:
+        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades']
+    elif 'PUNTADAS' in df.columns:
+        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Puntadas']
+    else:
+        metricas_operador.columns = ['Operador', 'Total Pedidos']
     
     col1, col2 = st.columns(2)
     
@@ -194,14 +227,60 @@ def mostrar_analisis_operadores(df):
         st.dataframe(metricas_operador, use_container_width=True)
     
     with col2:
-        # Gráfico de pedidos por operador
-        if len(metricas_operador) > 0:
+        # ✅ GRÁFICO DE PUNTADAS POR OPERADOR
+        if "PUNTADAS" in df.columns and 'Total Puntadas' in metricas_operador.columns:
+            fig = px.bar(
+                metricas_operador, 
+                x='Operador', 
+                y='Total Puntadas',
+                title="Puntadas Totales por Operador",
+                color='Total Puntadas',
+                text='Total Puntadas'
+            )
+            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Gráfico de pedidos por operador como fallback
             fig = px.bar(
                 metricas_operador, 
                 x='Operador', 
                 y='Total Pedidos',
                 title="Pedidos por Operador",
-                color='Total Pedidos'
+                color='Total Pedidos',
+                text='Total Pedidos'
+            )
+            fig.update_traces(texttemplate='%{text}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+
+def mostrar_analisis_puntadas(df):
+    """✅ NUEVA SECCIÓN: Análisis específico de puntadas"""
+    
+    if df.empty or "PUNTADAS" not in df.columns:
+        return
+    
+    st.subheader("🪡 Análisis de Puntadas")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Top operadores por puntadas
+        puntadas_por_operador = df.groupby("OPERADOR")["PUNTADAS"].sum().sort_values(ascending=False).reset_index()
+        puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
+        
+        st.write("**🏆 Ranking por Puntadas:**")
+        st.dataframe(puntadas_por_operador, use_container_width=True)
+    
+    with col2:
+        # Distribución de puntadas por tipo de prenda
+        if "TIPO DE PRENDA" in df.columns:
+            puntadas_por_prenda = df.groupby("TIPO DE PRENDA")["PUNTADAS"].sum().reset_index()
+            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas']
+            
+            fig = px.pie(
+                puntadas_por_prenda, 
+                values='Total Puntadas', 
+                names='Tipo de Prenda',
+                title="Distribución de Puntadas por Tipo de Prenda"
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -251,10 +330,12 @@ def mostrar_tendencias_temporales(df):
     df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
     tendencias = df_temporal.groupby('Fecha').agg({
         '#DE PEDIDO': 'count',
-        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
+        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
+        'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
     }).reset_index()
     
     if len(tendencias) > 1:
+        # Gráfico de pedidos por día
         fig = px.line(
             tendencias, 
             x='Fecha', 
@@ -263,6 +344,18 @@ def mostrar_tendencias_temporales(df):
             markers=True
         )
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Gráfico de puntadas por día (si existen)
+        if "PUNTADAS" in df.columns:
+            fig2 = px.line(
+                tendencias, 
+                x='Fecha', 
+                y='PUNTADAS',
+                title="Evolución de Puntadas por Día",
+                markers=True,
+                color_discrete_sequence=['red']
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
 def mostrar_interfaz_dashboard(df):
     """Interfaz principal del dashboard"""
@@ -278,8 +371,11 @@ def mostrar_interfaz_dashboard(df):
     # ✅ MÉTRICAS PRINCIPALES
     mostrar_metricas_principales(df_filtrado)
     
-    # ✅ ANÁLISIS POR OPERADOR
+    # ✅ ANÁLISIS POR OPERADOR (INCLUYE PUNTADAS)
     mostrar_analisis_operadores(df_filtrado)
+    
+    # ✅ NUEVA SECCIÓN: ANÁLISIS ESPECÍFICO DE PUNTADAS
+    mostrar_analisis_puntadas(df_filtrado)
     
     # ✅ ANÁLISIS DE PEDIDOS
     mostrar_analisis_pedidos(df_filtrado)
