@@ -358,23 +358,20 @@ def mostrar_tendencias_temporales(df):
             st.plotly_chart(fig2, use_container_width=True)
 
 def calcular_puntadas_automaticas(df):
-    """Calcular automáticamente las puntadas considerando máquinas específicas por operador"""
+    """Calcular automáticamente las puntadas considerando máquinas específicas y turnos"""
     
-    st.header("🧵 Cálculo Automático de Puntadas por Operador")
+    st.header("🧵 Cálculo Automático de Puntadas por Operador y Turno")
     
     # ✅ CONFIGURACIÓN DE MÁQUINAS POR OPERADOR
     st.subheader("Configuración de Máquinas")
     
-    # Detectar operadores únicos
-    if "OPERADOR" not in df.columns:
-        st.error("❌ Se necesita la columna 'OPERADOR' para el cálculo")
+    if "OPERADOR" not in df.columns or "Marca temporal" not in df.columns:
+        st.error("❌ Se necesitan las columnas 'OPERADOR' y 'Marca temporal'")
         return df
     
     operadores = sorted(df["OPERADOR"].unique())
     
-    # Configurar máquinas para cada operador
     config_maquinas = {}
-    
     for operador in operadores:
         col1, col2 = st.columns([2, 1])
         with col1:
@@ -383,34 +380,50 @@ def calcular_puntadas_automaticas(df):
             cabezas = st.number_input(
                 f"Cabezas para {operador}",
                 min_value=1,
-                value=6,  # Valor por defecto
+                value=6,
                 key=f"cabezas_{operador}"
             )
             config_maquinas[operador] = cabezas
     
-    # ✅ APLICAR CÁLCULO
-    if st.button("🔄 Calcular Puntadas Totales", type="primary"):
+    # ✅ FILTRO POR FECHA PARA DEFINIR TURNOS
+    st.subheader("📅 Configuración de Turnos")
+    
+    # Extraer fechas únicas de los datos
+    df_fechas = df.copy()
+    df_fechas['Fecha'] = df_fechas['Marca temporal'].dt.date
+    fechas_disponibles = sorted(df_fechas['Fecha'].unique())
+    
+    fecha_seleccionada = st.selectbox(
+        "Seleccionar fecha para cálculo:",
+        options=fechas_disponibles,
+        index=len(fechas_disponibles)-1 if fechas_disponibles else 0
+    )
+    
+    # Filtrar datos por fecha seleccionada
+    df_turno = df_fechas[df_fechas['Fecha'] == fecha_seleccionada]
+    
+    st.info(f"📊 Datos del {fecha_seleccionada}: {len(df_turno)} registros")
+    
+    if st.button("🔄 Calcular Puntadas del Turno", type="primary"):
         
-        # Verificar columnas necesarias
-        if "CANTIDAD" not in df.columns or "PUNTADAS" not in df.columns:
+        if "CANTIDAD" not in df_turno.columns or "PUNTADAS" not in df_turno.columns:
             st.error("❌ Se necesitan las columnas 'CANTIDAD' y 'PUNTADAS'")
             return df
         
-        df_calculado = df.copy()
-        
-        # 1. CALCULAR PUNTADAS POR MÚLTIPLOS (por orden)
+        # ✅ CALCULAR POR OPERADOR EN ESTE TURNO
         resultados = []
         totales_operador = {}
         
         for operador in operadores:
-            # Filtrar órdenes del operador
-            df_operador = df_calculado[df_calculado["OPERADOR"] == operador].copy()
+            # Filtrar órdenes del operador en ESTE TURNO
+            df_operador = df_turno[df_turno["OPERADOR"] == operador].copy()
             cabezas = config_maquinas[operador]
             
             if len(df_operador) == 0:
+                st.info(f"ℹ️ {operador} no tiene registros el {fecha_seleccionada}")
                 continue
             
-            # Calcular para cada orden del operador
+            # Calcular para cada orden del operador en este turno
             for idx, orden in df_operador.iterrows():
                 piezas = orden["CANTIDAD"]
                 puntadas_base = orden["PUNTADAS"]
@@ -423,20 +436,21 @@ def calcular_puntadas_automaticas(df):
                 
                 resultados.append({
                     'OPERADOR': operador,
+                    'FECHA': fecha_seleccionada,
                     'CANTIDAD': piezas,
                     'PUNTADAS_BASE': puntadas_base,
                     'CABEZAS': cabezas,
                     'PASADAS': pasadas,
                     'MULTIPLO': multiplo,
-                    'PUNTADAS_MULTIPLOS': puntadas_multiplos
+                    'PUNTADAS_MULTIPLOS': puntadas_multiplos,
+                    'PEDIDO': orden.get('#DE PEDIDO', 'N/A')
                 })
             
-            # 2. CALCULAR CAMBIOS DE COLOR (por operador)
-            # 36,000 por turno + 18,000 por cada orden
+            # ✅ CAMBIOS DE COLOR - 36,000 POR TURNO + 18,000 POR ORDEN
             ordenes_operador = len(df_operador)
             puntadas_cambios = 36000 + (ordenes_operador * 18000)
             
-            # 3. TOTAL POR OPERADOR
+            # Total por operador en este turno
             total_multiplos_operador = sum(r['PUNTADAS_MULTIPLOS'] for r in resultados if r['OPERADOR'] == operador)
             total_operador = total_multiplos_operador + puntadas_cambios
             
@@ -444,13 +458,13 @@ def calcular_puntadas_automaticas(df):
                 'ordenes': ordenes_operador,
                 'puntadas_multiplos': total_multiplos_operador,
                 'puntadas_cambios': puntadas_cambios,
-                'total': total_operador
+                'total': total_operador,
+                'fecha': fecha_seleccionada
             }
         
-        # ✅ MOSTRAR RESULTADOS
-        st.subheader("📊 Resultados por Operador")
+        # ✅ MOSTRAR RESULTADOS DEL TURNO
+        st.subheader(f"📊 Resultados del Turno - {fecha_seleccionada}")
         
-        # Métricas por operador
         for operador, datos in totales_operador.items():
             st.write(f"**👤 {operador}** (Máquina de {config_maquinas[operador]} cabezas)")
             
@@ -464,54 +478,33 @@ def calcular_puntadas_automaticas(df):
             with col4:
                 st.metric("**TOTAL**", f"**{datos['total']:,.0f}**")
         
-        # ✅ GRÁFICO COMPARATIVO
-        st.subheader("📈 Comparativa entre Operadores")
-        
-        df_comparativa = pd.DataFrame([
-            {
-                'Operador': operador,
-                'Puntadas Múltiplos': datos['puntadas_multiplos'],
-                'Puntadas Cambios': datos['puntadas_cambios'],
-                'Total': datos['total'],
-                'Máquina': f"{config_maquinas[operador]} cabezas"
-            }
-            for operador, datos in totales_operador.items()
-        ])
-        
-        fig = px.bar(
-            df_comparativa,
-            x='Operador',
-            y=['Puntadas Múltiplos', 'Puntadas Cambios'],
-            title="Distribución de Puntadas por Operador",
-            labels={'value': 'Puntadas', 'variable': 'Tipo'},
-            barmode='stack'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # ✅ TABLA DETALLADA
-        st.subheader("📋 Detalle de Cálculos")
-        df_detalle = pd.DataFrame(resultados)
-        st.dataframe(df_detalle, use_container_width=True)
-        
-        # ✅ RESUMEN GENERAL
-        st.subheader("🏆 Resumen General del Turno")
+        # ✅ RESUMEN GENERAL DEL TURNO
+        st.subheader(f"🏆 Resumen General del Turno - {fecha_seleccionada}")
         
         total_general = sum(datos['total'] for datos in totales_operador.values())
         total_multiplos_general = sum(datos['puntadas_multiplos'] for datos in totales_operador.values())
         total_cambios_general = sum(datos['puntadas_cambios'] for datos in totales_operador.values())
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Puntadas Múltiplos", f"{total_multiplos_general:,.0f}")
+            st.metric("Operadores Activos", len(totales_operador))
         with col2:
-            st.metric("Total Puntadas Cambios", f"{total_cambios_general:,.0f}")
+            st.metric("Total Puntadas Múltiplos", f"{total_multiplos_general:,.0f}")
         with col3:
-            st.metric("**TOTAL GENERAL**", f"**{total_general:,.0f}**")
+            st.metric("Total Puntadas Cambios", f"{total_cambios_general:,.0f}")
+        with col4:
+            st.metric("**TOTAL TURNO**", f"**{total_general:,.0f}**")
         
-        return df_calculado
+        # ✅ TABLA DETALLADA
+        st.subheader("📋 Detalle de Cálculos del Turno")
+        if resultados:
+            df_detalle = pd.DataFrame(resultados)
+            st.dataframe(df_detalle, use_container_width=True)
+        
+        return df_turno
     
     else:
-        st.info("👆 Haz clic en 'Calcular Puntadas Totales' para ver los resultados")
+        st.info("👆 Selecciona una fecha y haz clic en 'Calcular Puntadas del Turno'")
         return df
 
 def mostrar_interfaz_dashboard(df):
