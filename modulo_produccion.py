@@ -357,6 +357,86 @@ def mostrar_tendencias_temporales(df):
             )
             st.plotly_chart(fig2, use_container_width=True)
 
+def calcular_puntadas_automaticas(df, cabezas_maquina=6):
+    """Calcular automáticamente las puntadas con múltiplos y cambios de color"""
+    
+    st.header("🧵 Cálculo Automático de Puntadas")
+    
+    # Configuración
+    col1, col2 = st.columns(2)
+    with col1:
+        cabezas_maquina = st.number_input("Número de cabezas por máquina", 
+                                        min_value=1, value=cabezas_maquina, key="cabezas_config")
+    with col2:
+        st.info(f"Configuración actual: {cabezas_maquina} cabezas")
+        st.info("Mínimo 4,000 puntadas por pieza")
+    
+    # Aplicar cálculo a cada registro
+    df_calculado = df.copy()
+    
+    # Verificar columnas necesarias
+    if "CANTIDAD" not in df_calculado.columns or "PUNTADAS" not in df_calculado.columns:
+        st.error("❌ Se necesitan las columnas 'CANTIDAD' y 'PUNTADAS' para el cálculo")
+        return df
+    
+    # Calcular para cada fila
+    df_calculado['Pasadas'] = (df_calculado['CANTIDAD'] / cabezas_maquina).apply(np.ceil).astype(int)
+    df_calculado['Múltiplo'] = df_calculado['Pasadas'] * cabezas_maquina
+    df_calculado['Puntadas_Ajustadas'] = df_calculado['PUNTADAS'].apply(lambda x: max(x, 4000))
+    df_calculado['Puntadas_Múltiplos'] = df_calculado['Múltiplo'] * df_calculado['Puntadas_Ajustadas']
+    
+    # Agrupar por operador para calcular cambios de color
+    if "OPERADOR" in df_calculado.columns:
+        cambios_por_operador = df_calculado.groupby('OPERADOR').size().reset_index(name='Órdenes')
+        cambios_por_operador['Puntadas_Cambios'] = 36000 + (cambios_por_operador['Órdenes'] * 18000)
+        
+        # Unir con el dataframe principal
+        df_calculado = df_calculado.merge(cambios_por_operador[['OPERADOR', 'Puntadas_Cambios']], 
+                                         on='OPERADOR', how='left')
+        df_calculado['Puntadas_Totales'] = df_calculado['Puntadas_Múltiplos'] + df_calculado['Puntadas_Cambios']
+    else:
+        df_calculado['Puntadas_Cambios'] = 36000 + 18000  # Base si no hay operador
+        df_calculado['Puntadas_Totales'] = df_calculado['Puntadas_Múltiplos'] + 36000 + 18000
+    
+    # Mostrar resultados
+    st.subheader("📊 Resultados del Cálculo")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        total_multiplos = df_calculado['Puntadas_Múltiplos'].sum()
+        st.metric("Puntadas por Múltiplos", f"{total_multiplos:,.0f}")
+    with col2:
+        total_cambios = df_calculado['Puntadas_Cambios'].sum() if "Puntadas_Cambios" in df_calculado.columns else 0
+        st.metric("Puntadas por Cambios", f"{total_cambios:,.0f}")
+    with col3:
+        total_general = df_calculado['Puntadas_Totales'].sum()
+        st.metric("Total Puntadas Calculadas", f"{total_general:,.0f}")
+    
+    # Tabla detallada
+    st.write("**Detalle del Cálculo:**")
+    columnas_mostrar = ['OPERADOR', 'CANTIDAD', 'PUNTADAS', 'Pasadas', 'Múltiplo', 
+                       'Puntadas_Ajustadas', 'Puntadas_Múltiplos', 'Puntadas_Cambios', 'Puntadas_Totales']
+    columnas_disponibles = [col for col in columnas_mostrar if col in df_calculado.columns]
+    
+    st.dataframe(df_calculado[columnas_disponibles], use_container_width=True)
+    
+    # Gráfico comparativo
+    if "OPERADOR" in df_calculado.columns:
+        st.subheader("📈 Comparativa por Operador")
+        
+        resumen_operador = df_calculado.groupby('OPERADOR').agg({
+            'Puntadas_Múltiplos': 'sum',
+            'Puntadas_Cambios': 'first',
+            'Puntadas_Totales': 'sum'
+        }).reset_index()
+        
+        fig = px.bar(resumen_operador, x='OPERADOR', y=['Puntadas_Múltiplos', 'Puntadas_Cambios'],
+                    title="Distribución de Puntadas por Operador",
+                    labels={'value': 'Puntadas', 'variable': 'Tipo'})
+        st.plotly_chart(fig, use_container_width=True)
+    
+    return df_calculado
+
 def mostrar_interfaz_dashboard(df):
     """Interfaz principal del dashboard"""
     
@@ -368,7 +448,11 @@ def mostrar_interfaz_dashboard(df):
     # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
     
-    # ✅ MÉTRICAS PRINCIPALES
+    # ✅ NUEVA SECCIÓN: CÁLCULO AUTOMÁTICO DE PUNTADAS (INSERTAR ESTO)
+    with st.expander("🧵 CALCULAR PUNTADAS AUTOMÁTICAS (Múltiplos + Cambios de Color)", expanded=True):
+        df_calculado = calcular_puntadas_automaticas(df_filtrado)
+    
+    # ✅ MÉTRICAS PRINCIPALES (las que ya tienes)
     mostrar_metricas_principales(df_filtrado)
     
     # ✅ ANÁLISIS POR OPERADOR (INCLUYE PUNTADAS)
