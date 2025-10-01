@@ -378,7 +378,7 @@ def calcular_puntadas_automaticas(df):
             st.write(f"**{operador}**")
         with col2:
             cabezas = st.number_input(
-                f"Cabezas para {operador}",
+                f"Cabezas {operador}",
                 min_value=1,
                 value=6,
                 key=f"cabezas_{operador}"
