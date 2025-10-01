@@ -374,10 +374,14 @@ def calcular_puntadas_automaticas(df, cabezas_maquina=6):
     # Aplicar cálculo a cada registro
     df_calculado = df.copy()
     
-    # Verificar columnas necesarias
+    # Verificar columnas necesarias - MOSTRAR MENSAJE PERO NO SALIR TEMPRANO
     if "CANTIDAD" not in df_calculado.columns or "PUNTADAS" not in df_calculado.columns:
         st.error("❌ Se necesitan las columnas 'CANTIDAD' y 'PUNTADAS' para el cálculo")
-        return df
+        st.info("📋 Columnas disponibles en tus datos:")
+        st.write(df_calculado.columns.tolist())
+        return df_calculado  # ✅ Retorna el dataframe original pero muestra el mensaje
+    
+    # ... el resto de tu código igual ...
     
     # Calcular para cada fila
     df_calculado['Pasadas'] = (df_calculado['CANTIDAD'] / cabezas_maquina).apply(np.ceil).astype(int)
