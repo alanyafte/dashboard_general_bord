@@ -1,7 +1,7 @@
 import streamlit as st
 from modulo_clima_laboral import mostrar_dashboard_clima_laboral
 from modulo_produccion import mostrar_dashboard_produccion
-
+from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion 
 # Configuración de la página
 st.set_page_config(
     page_title="Dashboard Integral",
