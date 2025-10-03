@@ -31,7 +31,7 @@ def mostrar_dashboard_satisfaccion():
         gc = gspread.authorize(creds)
     
         # Aquí necesitarás el Sheet ID de tus formularios de satisfacción
-        sheet_id = st.secrets["gsheets"]["satisfaccion_cliente_sheet_id"]
+        sheet_id = st.secrets["gsheets"]["1S_bdY-k6XlXB6TgalRefJOM3x8DwC82Fj2m0egmEfR0"]
         sh = gc.open_by_key(sheet_id)
         
         # Leer las dos pestañas de formularios
