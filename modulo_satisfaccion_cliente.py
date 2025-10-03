@@ -7,7 +7,7 @@ import seaborn as sns
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
-def mostrar_dashboard_satisfaccion_cliente():
+def mostrar_dashboard_satisfaccion():
     # --- CONFIGURACIÓN STREAMLIT ---
     st.header("😊 Dashboard de Satisfacción al Cliente")
     st.caption("Datos actualizados desde Google Sheets - Costumatic & Bordamatic")
@@ -31,7 +31,7 @@ def mostrar_dashboard_satisfaccion_cliente():
         gc = gspread.authorize(creds)
     
         # Aquí necesitarás el Sheet ID de tus formularios de satisfacción
-        sheet_id = st.secrets["gsheets"]["1S_bdY-k6XlXB6TgalRefJOM3x8DwC82Fj2m0egmEfR0"]  # Necesitarás agregar esto a tus secrets
+        sheet_id = st.secrets["gsheets"]["satisfaccion_cliente_sheet_id"]
         sh = gc.open_by_key(sheet_id)
         
         # Leer las dos pestañas de formularios
@@ -262,6 +262,3 @@ def mostrar_dashboard_satisfaccion_cliente():
            - 'respuesta_cliente_bordamatic'
         3. Verificar que el servicio account tenga acceso al Sheet
         """)
-
-# Llamar la función en tu app principal
-# mostrar_dashboard_satisfaccion_cliente()
