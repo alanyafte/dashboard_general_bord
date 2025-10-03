@@ -73,7 +73,7 @@ else:
         
     elif modulo_seleccionado == "😊 Satisfacción Cliente":
         st.info("Módulo en desarrollo...")
-        # mostrar_dashboard_satisfaccion()
+        mostrar_dashboard_satisfaccion()
     
     # Botón para cerrar sesión del módulo actual
     st.sidebar.markdown("---")
