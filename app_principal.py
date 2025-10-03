@@ -72,7 +72,6 @@ else:
         mostrar_dashboard_clima_laboral()
         
     elif modulo_seleccionado == "😊 Satisfacción Cliente":
-        st.info("Módulo en desarrollo...")
         mostrar_dashboard_satisfaccion()
     
     # Botón para cerrar sesión del módulo actual
