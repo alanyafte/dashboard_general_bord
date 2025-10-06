@@ -2,6 +2,7 @@ import streamlit as st
 from modulo_clima_laboral import mostrar_dashboard_clima_laboral
 from modulo_produccion import mostrar_dashboard_produccion
 from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion
+from modulo_comisiones import mostrar_dashboard_comisiones
 # Configuración de la página
 st.set_page_config(
     page_title="Dashboard Integral",
@@ -13,7 +14,8 @@ st.set_page_config(
 CONTRASEÑAS_MODULOS = {
     "🏭 Producción": "produccion123",
     "👥 Clima Laboral": "clima456", 
-    "😊 Satisfacción Cliente": "cliente789"
+    "😊 Satisfacción Cliente": "cliente789",
+    "💰 Comisiones": "encargado123"
 }
 
 # Inicializar estado de sesión para cada módulo
@@ -25,7 +27,7 @@ for modulo in CONTRASEÑAS_MODULOS.keys():
 st.sidebar.title("🌐 Navegación")
 modulo_seleccionado = st.sidebar.radio(
     "Seleccionar Módulo:",
-    ["🏭 Producción", "👥 Clima Laboral", "😊 Satisfacción Cliente"]
+    ["🏭 Producción", "👥 Clima Laboral", "😊 Satisfacción Cliente", "💰 Comisiones"]
 )
 
 # Título principal
@@ -73,6 +75,9 @@ else:
         
     elif modulo_seleccionado == "😊 Satisfacción Cliente":
         mostrar_dashboard_satisfaccion()
+        
+    elif modulo_seleccionado == "💰 Comisiones":
+        mostrar_dashboard_comisiones()
     
     # Botón para cerrar sesión del módulo actual
     st.sidebar.markdown("---")
