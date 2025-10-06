@@ -11,7 +11,7 @@ def mostrar_dashboard_comisiones():
     gestionar_comisiones_manuales()
 
 def gestionar_comisiones_manuales():
-    """Sistema liviano para comisiones manuales"""
+    """Sistema liviano para comisiones manuales - CON MÁS OPCIONES"""
     
     st.header("💰 Gestión de Comisiones Manuales")
     
@@ -23,96 +23,65 @@ def gestionar_comisiones_manuales():
     
     st.success("✅ Acceso concedido - Modo Encargado")
     
-    # ✅ CARGAR DATOS BÁSICOS (solo lo necesario)
+    # ✅ CARGAR DATOS BÁSICOS
     df_produccion = cargar_datos_basicos_produccion()
     if df_produccion is None:
         return
     
-    # ✅ CONFIGURACIÓN DEL DÍA Y TURNO
+    # ✅ CONFIGURACIÓN MÁS FLEXIBLE
     st.subheader("📅 Configurar Período")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
+        # Por defecto usar hoy, pero permitir seleccionar cualquier fecha
         fecha_seleccionada = st.date_input("Fecha:", value=datetime.now().date())
     with col2:
         turno_seleccionado = st.selectbox("Turno:", ["MAÑANA", "TARDE"])
+    with col3:
+        # Opción para ver TODOS los datos (sin filtro de turno)
+        ver_todo_el_dia = st.checkbox("Ver todo el día", value=False)
     
-    # ✅ CALCULAR PUNTADAS POR OPERADOR (SOLO PARA ESTE TURNO)
+    # ✅ CALCULAR PUNTADAS
     st.subheader("📊 Puntadas del Turno")
     
-    puntadas_operadores = calcular_puntadas_turno(df_produccion, fecha_seleccionada, turno_seleccionado)
+    if ver_todo_el_dia:
+        # Usar función simple sin filtro de turno
+        puntadas_operadores = calcular_puntadas_dia_completo(df_produccion, fecha_seleccionada)
+        st.info("📋 Mostrando datos de TODO el día")
+    else:
+        # Usar función con filtro de turno
+        puntadas_operadores = calcular_puntadas_turno(df_produccion, fecha_seleccionada, turno_seleccionado)
+
+def calcular_puntadas_dia_completo(df, fecha):
+    """Calcular puntadas para todo el día (sin filtro de turno)"""
     
-    if not puntadas_operadores:
-        st.warning("No hay datos para este turno")
-        return
+    df_fecha = df.copy()
+    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
+    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
     
-    # Mostrar resumen rápido
-    for operador, datos in puntadas_operadores.items():
-        col1, col2, col3 = st.columns([3, 2, 1])
-        with col1:
-            st.write(f"**{operador}**")
-        with col2:
-            st.write(f"Puntadas: {datos['puntadas']:,.0f}")
-        with col3:
-            st.write(f"Pedidos: {datos['pedidos']}")
+    # Filtrar por fecha
+    df_dia = df_fecha[df_fecha['Fecha'] == fecha]
     
-    # ✅ GESTIÓN MANUAL DE COMISIONES
-    st.subheader("💵 Asignar Comisiones Manuales")
+    if df_dia.empty:
+        st.error(f"❌ No hay registros para la fecha {fecha}")
+        return {}
     
-    comisiones_guardadas = cargar_comisiones_existentes(fecha_seleccionada, turno_seleccionado)
+    # Agrupar por operador
+    puntadas_por_operador = df_dia.groupby('OPERADOR').agg({
+        'PUNTADAS': 'sum',
+        '#DE PEDIDO': 'count'
+    }).to_dict('index')
     
-    for operador, datos in puntadas_operadores.items():
-        with st.expander(f"💰 {operador} - {datos['puntadas']:,.0f} puntadas", expanded=True):
-            
-            # Buscar si ya existe comisión guardada
-            comision_existente = next(
-                (c for c in comisiones_guardadas if c['Operador'] == operador), 
-                None
-            )
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Comisión base automática (sugerencia)
-                comision_base_sugerida = calcular_comision_base_sugerida(datos['puntadas'])
-                comision_base = st.number_input(
-                    f"Comisión Base {operador}",
-                    min_value=0.0,
-                    value=comision_existente['Comision_Base'] if comision_existente else comision_base_sugerida,
-                    step=50.0,
-                    key=f"base_{operador}"
-                )
-            
-            with col2:
-                # Compensación manual
-                compensacion = st.number_input(
-                    f"Compensación {operador}",
-                    min_value=0.0,
-                    value=comision_existente['Compensacion_Manual'] if comision_existente else 0.0,
-                    step=25.0,
-                    key=f"comp_{operador}"
-                )
-            
-            with col3:
-                total = comision_base + compensacion
-                st.metric("TOTAL", f"${total:,.2f}")
-                
-                # Botón para guardar individual
-                if st.button("💾 Guardar", key=f"btn_{operador}"):
-                    guardar_comision_individual(
-                        fecha_seleccionada,
-                        turno_seleccionado,
-                        operador,
-                        datos['puntadas'],
-                        comision_base,
-                        compensacion,
-                        total
-                    )
+    # Formatear resultado
+    resultado = {}
+    for operador, datos in puntadas_por_operador.items():
+        resultado[operador] = {
+            'puntadas': datos['PUNTADAS'],
+            'pedidos': datos['#DE PEDIDO']
+        }
     
-    # ✅ GUARDAR TODAS LAS COMISIONES
-    if st.button("💾 Guardar Todas las Comisiones del Turno", type="primary"):
-        guardar_todas_comisiones(fecha_seleccionada, turno_seleccionado, puntadas_operadores)
-        st.success("✅ Comisiones guardadas exitosamente!")
+    st.success(f"✅ Encontrados {len(resultado)} operadores en todo el día")
+    return resultado    
 
 def cargar_datos_basicos_produccion():
     """Carga solo las columnas necesarias para evitar peso"""
@@ -157,24 +126,70 @@ def cargar_datos_basicos_produccion():
         return None
 
 def calcular_puntadas_turno(df, fecha, turno):
-    """Calcular puntadas por operador para un turno específico"""
+    """Calcular puntadas por operador para un turno específico CON DIAGNÓSTICO"""
+    
+    st.info("🔍 **Modo diagnóstico activado**")
+    
     df_fecha = df.copy()
-    df_fecha['Fecha'] = pd.to_datetime(df_fecha['Marca temporal']).dt.date
-    df_fecha['Hora'] = pd.to_datetime(df_fecha['Marca temporal']).dt.hour
+    
+    # Convertir a datetime y extraer fecha/hora
+    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
+    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
+    df_fecha['Hora'] = df_fecha['Marca temporal'].dt.hour
+    df_fecha['Dia_Semana'] = df_fecha['Marca temporal'].dt.day_name()
+    
+    # Mostrar información de diagnóstico
+    st.write("### 📊 Diagnóstico de Datos:")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total registros", len(df_fecha))
+    with col2:
+        st.metric("Fechas únicas", df_fecha['Fecha'].nunique())
+    with col3:
+        st.metric("Horas únicas", df_fecha['Hora'].nunique())
+    
+    # Mostrar rango de fechas y horas disponibles
+    st.write("**📅 Fechas disponibles:**", sorted(df_fecha['Fecha'].unique()))
+    st.write("**⏰ Horas disponibles:**", sorted(df_fecha['Hora'].unique()))
     
     # Filtrar por fecha
     df_dia = df_fecha[df_fecha['Fecha'] == fecha]
     
-    # Filtrar por turno
+    st.write(f"**📋 Registros para {fecha}:** {len(df_dia)}")
+    
+    if df_dia.empty:
+        st.error("❌ No hay registros para esta fecha")
+        return {}
+    
+    # Mostrar distribución de horas para esta fecha
+    st.write("**📈 Distribución por horas en esta fecha:**")
+    distribucion_horas = df_dia['Hora'].value_counts().sort_index()
+    st.bar_chart(distribucion_horas)
+    
+    # Filtrar por turno (rangos más flexibles)
     if turno == "MAÑANA":
-        df_turno = df_dia[df_dia['Hora'].between(6, 14)]  # 6am - 2pm
+        df_turno = df_dia[df_dia['Hora'].between(5, 15)]  # 5am - 3pm (más flexible)
+        st.write("**🌅 Turno MAÑANA:** 5:00 - 15:00 hrs")
     else:  # TARDE
-        df_turno = df_dia[df_dia['Hora'].between(14, 22)]  # 2pm - 10pm
+        df_turno = df_dia[df_dia['Hora'].between(13, 23)]  # 1pm - 11pm (más flexible)
+        st.write("**🌇 Turno TARDE:** 13:00 - 23:00 hrs")
+    
+    st.write(f"**📊 Registros en turno {turno}:** {len(df_turno)}")
     
     if df_turno.empty:
+        st.warning(f"⚠️ No hay registros en el horario del turno {turno}")
+        
+        # Mostrar sugerencia de horarios alternativos
+        st.write("**💡 Sugerencia:** ¿Quizás los horarios son diferentes?")
+        st.write("Horas con datos en esta fecha:", sorted(df_dia['Hora'].unique()))
         return {}
     
     # Agrupar por operador
+    if 'OPERADOR' not in df_turno.columns:
+        st.error("❌ No existe la columna 'OPERADOR'")
+        return {}
+    
     puntadas_por_operador = df_turno.groupby('OPERADOR').agg({
         'PUNTADAS': 'sum',
         '#DE PEDIDO': 'count'
@@ -187,6 +202,8 @@ def calcular_puntadas_turno(df, fecha, turno):
             'puntadas': datos['PUNTADAS'],
             'pedidos': datos['#DE PEDIDO']
         }
+    
+    st.success(f"✅ Encontrados {len(resultado)} operadores en turno {turno}")
     
     return resultado
 
