@@ -231,7 +231,7 @@ def mostrar_comisiones_operador():
 
 def obtener_lista_operadores():
     """Obtener lista de operadores (actualiza con tus operadores reales)"""
-    return ["OPERADOR_A", "OPERADOR_B", "OPERADOR_C", "OPERADOR_D", "OPERADOR_E"]
+    return ["Susi", "Juanito", "Esmeralda", "Rigoberto", "Maricela"]
 
 def cargar_datos_semana_produccion(fecha_inicio, fecha_fin):
     """Cargar datos de producción de una semana específica"""
