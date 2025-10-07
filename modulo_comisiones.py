@@ -1,19 +1,30 @@
-# ✅ NUEVO ARCHIVO - Todo el sistema de comisiones
+# ✅ SISTEMA COMPLETO DE COMISIONES SEMANALES
 import streamlit as st
 import gspread
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
 def mostrar_dashboard_comisiones():
     """Función principal del dashboard de comisiones"""
-    gestionar_comisiones_manuales()
+    gestionar_comisiones_semanales()
 
-def gestionar_comisiones_manuales():
-    """Sistema liviano para comisiones manuales - CON MÁS OPCIONES"""
+def gestionar_comisiones_semanales():
+    """Sistema para comisiones semanales por operador"""
     
-    st.header("💰 Gestión de Comisiones Manuales")
+    st.title("💰 Sistema de Comisiones Semanales")
+    
+    # ✅ MODO SELECCIÓN: ENCARGADO vs OPERADOR
+    modo = st.radio("Selecciona el modo:", ["👨‍💼 Modo Encargado", "👷 Modo Operador"])
+    
+    if "👨‍💼 Modo Encargado" in modo:
+        gestionar_comisiones_encargado()
+    else:
+        mostrar_comisiones_operador()
+
+def gestionar_comisiones_encargado():
+    """Interfaz para que el encargado asigne comisiones"""
     
     # ✅ VERIFICACIÓN DE ACCESO
     contraseña = st.text_input("🔐 Contraseña de Encargado:", type="password")
@@ -23,68 +34,126 @@ def gestionar_comisiones_manuales():
     
     st.success("✅ Acceso concedido - Modo Encargado")
     
-    # ✅ CARGAR DATOS BÁSICOS
-    df_produccion = cargar_datos_basicos_produccion()
-    if df_produccion is None:
+    # ✅ CONFIGURACIÓN SEMANA
+    st.subheader("📅 Configurar Semana")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Fecha inicio de semana:", 
+                                   value=datetime.now().date() - timedelta(days=datetime.now().weekday()))
+    with col2:
+        # Mostrar rango de la semana
+        fecha_fin = fecha_inicio + timedelta(days=6)
+        st.write(f"**Semana:** {fecha_inicio} al {fecha_fin}")
+    
+    # ✅ CARGAR DATOS DE PRODUCCIÓN DE LA SEMANA
+    df_produccion = cargar_datos_semana_produccion(fecha_inicio, fecha_fin)
+    if df_produccion is None or df_produccion.empty:
+        st.warning("⚠️ No hay datos de producción para esta semana")
         return
     
-    # ✅ CONFIGURACIÓN MÁS FLEXIBLE
-    st.subheader("📅 Configurar Período")
+    # ✅ RESUMEN DE PRODUCCIÓN POR OPERADOR
+    st.subheader("📊 Resumen de Producción Semanal")
     
+    # Agrupar por operador y día
+    resumen_operadores = calcular_resumen_semanal(df_produccion, fecha_inicio)
+    
+    # Mostrar resumen
+    for operador, datos_semana in resumen_operadores.items():
+        with st.expander(f"👤 **{operador}** - Total: {datos_semana['total_puntadas']:,} puntadas"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Producción por día:**")
+                for fecha, puntadas in datos_semana['puntadas_por_dia'].items():
+                    st.write(f"- {fecha}: {puntadas:,} puntadas")
+            
+            with col2:
+                # Asignación de comisiones
+                st.write("**Asignar Comisiones:**")
+                comision_total = 0
+                
+                for fecha, puntadas in datos_semana['puntadas_por_dia'].items():
+                    comision_dia = st.number_input(
+                        f"Comisión {fecha}",
+                        min_value=0.0,
+                        max_value=1000.0,
+                        value=calcular_comision_sugerida(puntadas),
+                        key=f"comision_{operador}_{fecha}"
+                    )
+                    comision_total += comision_dia
+                
+                st.metric("💰 Comisión Total Semanal", f"${comision_total:,.2f}")
+                
+                # Botón para guardar comisiones
+                if st.button(f"💾 Guardar Comisiones - {operador}", key=f"guardar_{operador}"):
+                    guardar_comisiones_semanales(
+                        operador, fecha_inicio, datos_semana['puntadas_por_dia'], 
+                        comision_total, datos_semana['total_pedidos']
+                    )
+
+def mostrar_comisiones_operador():
+    """Interfaz para que los operadores vean sus comisiones"""
+    
+    st.subheader("👷 Consulta de Comisiones - Operador")
+    
+    # ✅ LISTA DE OPERADORES (podría venir de una base de datos)
+    operadores = ["OPERADOR_A", "OPERADOR_B", "OPERADOR_C", "OPERADOR_D", "OPERADOR_E"]
+    operador_seleccionado = st.selectbox("Selecciona tu nombre:", operadores)
+    
+    # ✅ CONSULTAR SEMANA
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_consulta = st.date_input("Semana a consultar:", 
+                                     value=datetime.now().date() - timedelta(days=datetime.now().weekday()))
+    
+    fecha_inicio_semana = fecha_consulta
+    fecha_fin_semana = fecha_inicio_semana + timedelta(days=6)
+    
+    # ✅ CARGAR COMISIONES DEL OPERADOR
+    comisiones_operador = cargar_comisiones_operador(operador_seleccionado, fecha_inicio_semana)
+    
+    if not comisiones_operador:
+        st.info(f"ℹ️ No hay comisiones registradas para {operador_seleccionado} en la semana del {fecha_inicio_semana}")
+        return
+    
+    # ✅ MOSTRAR DETALLE DE COMISIONES
+    st.subheader(f"💵 Comisiones de {operador_seleccionado}")
+    st.write(f"**Período:** {fecha_inicio_semana} al {fecha_fin_semana}")
+    
+    # Crear DataFrame para mostrar
+    datos_tabla = []
+    total_comision = 0
+    
+    for fecha, datos in comisiones_operador['detalle_diario'].items():
+        datos_tabla.append({
+            'Fecha': fecha,
+            'Puntadas': f"{datos['puntadas']:,}",
+            'Comisión': f"${datos['comision']:,.2f}",
+            'Pedidos': datos['pedidos']
+        })
+        total_comision += datos['comision']
+    
+    # Mostrar tabla
+    df_comisiones = pd.DataFrame(datos_tabla)
+    st.dataframe(df_comisiones, use_container_width=True)
+    
+    # ✅ RESUMEN FINAL
     col1, col2, col3 = st.columns(3)
     with col1:
-        # Por defecto usar hoy, pero permitir seleccionar cualquier fecha
-        fecha_seleccionada = st.date_input("Fecha:", value=datetime.now().date())
+        st.metric("📊 Total Puntadas", f"{comisiones_operador['total_puntadas']:,}")
     with col2:
-        turno_seleccionado = st.selectbox("Turno:", ["MAÑANA", "TARDE"])
+        st.metric("📦 Total Pedidos", comisiones_operador['total_pedidos'])
     with col3:
-        # Opción para ver TODOS los datos (sin filtro de turno)
-        ver_todo_el_dia = st.checkbox("Ver todo el día", value=False)
+        st.metric("💰 Comisión Total", f"${total_comision:,.2f}")
     
-    # ✅ CALCULAR PUNTADAS
-    st.subheader("📊 Puntadas del Turno")
-    
-    if ver_todo_el_dia:
-        # Usar función simple sin filtro de turno
-        puntadas_operadores = calcular_puntadas_dia_completo(df_produccion, fecha_seleccionada)
-        st.info("📋 Mostrando datos de TODO el día")
-    else:
-        # Usar función con filtro de turno
-        puntadas_operadores = calcular_puntadas_turno(df_produccion, fecha_seleccionada, turno_seleccionado)
+    # ✅ BOTÓN DE CONFIRMACIÓN
+    if st.button("✅ Confirmar Visualización"):
+        st.success("✔️ Comisiones verificadas correctamente")
+        guardar_confirmacion_operador(operador_seleccionado, fecha_inicio_semana, total_comision)
 
-def calcular_puntadas_dia_completo(df, fecha):
-    """Calcular puntadas para todo el día (sin filtro de turno)"""
-    
-    df_fecha = df.copy()
-    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
-    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
-    
-    # Filtrar por fecha
-    df_dia = df_fecha[df_fecha['Fecha'] == fecha]
-    
-    if df_dia.empty:
-        st.error(f"❌ No hay registros para la fecha {fecha}")
-        return {}
-    
-    # Agrupar por operador
-    puntadas_por_operador = df_dia.groupby('OPERADOR').agg({
-        'PUNTADAS': 'sum',
-        '#DE PEDIDO': 'count'
-    }).to_dict('index')
-    
-    # Formatear resultado
-    resultado = {}
-    for operador, datos in puntadas_por_operador.items():
-        resultado[operador] = {
-            'puntadas': datos['PUNTADAS'],
-            'pedidos': datos['#DE PEDIDO']
-        }
-    
-    st.success(f"✅ Encontrados {len(resultado)} operadores en todo el día")
-    return resultado    
-
-def cargar_datos_basicos_produccion():
-    """Carga solo las columnas necesarias para evitar peso"""
+def cargar_datos_semana_produccion(fecha_inicio, fecha_fin):
+    """Cargar datos de producción de una semana específica"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
@@ -105,121 +174,87 @@ def cargar_datos_basicos_produccion():
         sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
         worksheet = gc.open_by_key(sheet_id).worksheet("reporte_de_trabajo")
         
-        # ✅ SOLO CARGAR COLUMNAS NECESARIAS (reduce peso en 80%)
+        # Cargar datos
         data = worksheet.get_all_values()
         df_raw = pd.DataFrame(data[1:], columns=data[0])
         
-        # Mantener solo columnas esenciales
+        # Filtrar columnas necesarias
         columnas_necesarias = ['Marca temporal', 'OPERADOR', 'PUNTADAS', 'CANTIDAD', '#DE PEDIDO']
         columnas_existentes = [col for col in columnas_necesarias if col in df_raw.columns]
-        
         df_ligero = df_raw[columnas_existentes].copy()
         
-        # Conversiones básicas
-        if "PUNTADAS" in df_ligero.columns:
-            df_ligero["PUNTADAS"] = pd.to_numeric(df_ligero["PUNTADAS"], errors='coerce').fillna(0)
+        # Convertir fechas y filtrar por semana
+        df_ligero['Marca temporal'] = pd.to_datetime(df_ligero['Marca temporal'], errors='coerce')
+        df_ligero['Fecha'] = df_ligero['Marca temporal'].dt.date
         
-        return df_ligero
+        # Filtrar por rango de fechas
+        mask = (df_ligero['Fecha'] >= fecha_inicio) & (df_ligero['Fecha'] <= fecha_fin)
+        df_semana = df_ligero[mask].copy()
+        
+        # Convertir puntadas a numérico
+        if "PUNTADAS" in df_semana.columns:
+            df_semana["PUNTADAS"] = pd.to_numeric(df_semana["PUNTADAS"], errors='coerce').fillna(0)
+        
+        return df_semana
         
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {str(e)}")
         return None
 
-def calcular_puntadas_turno(df, fecha, turno):
-    """Calcular puntadas por operador para un turno específico CON DIAGNÓSTICO"""
+def calcular_resumen_semanal(df_produccion, fecha_inicio):
+    """Calcular resumen semanal por operador"""
     
-    st.info("🔍 **Modo diagnóstico activado**")
-    
-    df_fecha = df.copy()
-    
-    # Convertir a datetime y extraer fecha/hora
-    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
-    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
-    df_fecha['Hora'] = df_fecha['Marca temporal'].dt.hour
-    df_fecha['Dia_Semana'] = df_fecha['Marca temporal'].dt.day_name()
-    
-    # Mostrar información de diagnóstico
-    st.write("### 📊 Diagnóstico de Datos:")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total registros", len(df_fecha))
-    with col2:
-        st.metric("Fechas únicas", df_fecha['Fecha'].nunique())
-    with col3:
-        st.metric("Horas únicas", df_fecha['Hora'].nunique())
-    
-    # Mostrar rango de fechas y horas disponibles
-    st.write("**📅 Fechas disponibles:**", sorted(df_fecha['Fecha'].unique()))
-    st.write("**⏰ Horas disponibles:**", sorted(df_fecha['Hora'].unique()))
-    
-    # Filtrar por fecha
-    df_dia = df_fecha[df_fecha['Fecha'] == fecha]
-    
-    st.write(f"**📋 Registros para {fecha}:** {len(df_dia)}")
-    
-    if df_dia.empty:
-        st.error("❌ No hay registros para esta fecha")
+    if df_produccion.empty:
         return {}
     
-    # Mostrar distribución de horas para esta fecha
-    st.write("**📈 Distribución por horas en esta fecha:**")
-    distribucion_horas = df_dia['Hora'].value_counts().sort_index()
-    st.bar_chart(distribucion_horas)
-    
-    # Filtrar por turno (rangos más flexibles)
-    if turno == "MAÑANA":
-        df_turno = df_dia[df_dia['Hora'].between(5, 15)]  # 5am - 3pm (más flexible)
-        st.write("**🌅 Turno MAÑANA:** 5:00 - 15:00 hrs")
-    else:  # TARDE
-        df_turno = df_dia[df_dia['Hora'].between(13, 23)]  # 1pm - 11pm (más flexible)
-        st.write("**🌇 Turno TARDE:** 13:00 - 23:00 hrs")
-    
-    st.write(f"**📊 Registros en turno {turno}:** {len(df_turno)}")
-    
-    if df_turno.empty:
-        st.warning(f"⚠️ No hay registros en el horario del turno {turno}")
-        
-        # Mostrar sugerencia de horarios alternativos
-        st.write("**💡 Sugerencia:** ¿Quizás los horarios son diferentes?")
-        st.write("Horas con datos en esta fecha:", sorted(df_dia['Hora'].unique()))
-        return {}
+    # Generar todas las fechas de la semana
+    fechas_semana = [fecha_inicio + timedelta(days=i) for i in range(7)]
     
     # Agrupar por operador
-    if 'OPERADOR' not in df_turno.columns:
-        st.error("❌ No existe la columna 'OPERADOR'")
-        return {}
+    operadores = df_produccion['OPERADOR'].unique()
+    resumen = {}
     
-    puntadas_por_operador = df_turno.groupby('OPERADOR').agg({
-        'PUNTADAS': 'sum',
-        '#DE PEDIDO': 'count'
-    }).to_dict('index')
-    
-    # Formatear resultado
-    resultado = {}
-    for operador, datos in puntadas_por_operador.items():
-        resultado[operador] = {
-            'puntadas': datos['PUNTADAS'],
-            'pedidos': datos['#DE PEDIDO']
+    for operador in operadores:
+        df_operador = df_produccion[df_produccion['OPERADOR'] == operador]
+        
+        puntadas_por_dia = {}
+        total_puntadas = 0
+        total_pedidos = 0
+        
+        for fecha in fechas_semana:
+            df_dia = df_operador[df_operador['Fecha'] == fecha]
+            puntadas_dia = df_dia['PUNTADAS'].sum() if not df_dia.empty else 0
+            pedidos_dia = len(df_dia) if not df_dia.empty else 0
+            
+            puntadas_por_dia[fecha.strftime('%Y-%m-%d')] = puntadas_dia
+            total_puntadas += puntadas_dia
+            total_pedidos += pedidos_dia
+        
+        resumen[operador] = {
+            'puntadas_por_dia': puntadas_por_dia,
+            'total_puntadas': total_puntadas,
+            'total_pedidos': total_pedidos
         }
     
-    st.success(f"✅ Encontrados {len(resultado)} operadores en turno {turno}")
-    
-    return resultado
+    return resumen
 
-def calcular_comision_base_sugerida(puntadas):
-    """Calcular comisión base sugerida basada en puntadas"""
+def calcular_comision_sugerida(puntadas):
+    """Calcular comisión sugerida basada en puntadas"""
     if puntadas >= 200000:
         return 300.0
     elif puntadas >= 150000:
-        return 200.0
+        return 250.0
     elif puntadas >= 100000:
+        return 200.0
+    elif puntadas >= 50000:
+        return 150.0
+    elif puntadas >= 25000:
         return 100.0
     else:
         return 50.0
 
-def cargar_comisiones_existentes(fecha, turno):
-    """Cargar comisiones ya guardadas (muy liviano)"""
+def guardar_comisiones_semanales(operador, fecha_inicio, puntadas_por_dia, comision_total, total_pedidos):
+    """Guardar comisiones semanales en Google Sheets"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
@@ -238,28 +273,106 @@ def cargar_comisiones_existentes(fecha, turno):
         gc = gspread.authorize(creds)
         
         sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
-        worksheet = gc.open_by_key(sheet_id).worksheet("comisiones_manuales")
-        data = worksheet.get_all_values()
+        worksheet = gc.open_by_key(sheet_id).worksheet("comisiones_semanales")
         
-        if len(data) <= 1:  # Solo headers
-            return []
+        # Preparar datos para guardar
+        fecha_fin = fecha_inicio + timedelta(days=6)
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Guardar cada día individualmente
+        for fecha_str, puntadas in puntadas_por_dia.items():
+            comision_dia = calcular_comision_sugerida(puntadas)  # O guardar las asignadas individualmente
+            
+            nueva_fila = [
+                operador,
+                fecha_str,  # Fecha específica del día
+                fecha_inicio.strftime('%Y-%m-%d'),  # Inicio semana
+                fecha_fin.strftime('%Y-%m-%d'),     # Fin semana
+                puntadas,
+                comision_dia,
+                total_pedidos,
+                "Encargado Operación",  # Asignado por
+                timestamp,
+                "PENDIENTE"  # Estado de confirmación
+            ]
+            
+            worksheet.append_row(nueva_fila)
+        
+        st.success(f"✅ Comisiones guardadas para {operador}")
+        
+    except Exception as e:
+        st.error(f"❌ Error al guardar comisiones: {str(e)}")
+
+def cargar_comisiones_operador(operador, fecha_inicio_semana):
+    """Cargar comisiones de un operador específico para una semana"""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        worksheet = gc.open_by_key(sheet_id).worksheet("comisiones_semanales")
+        
+        # Cargar todos los datos
+        data = worksheet.get_all_values()
+        if len(data) <= 1:
+            return None
         
         df_comisiones = pd.DataFrame(data[1:], columns=data[0])
         
-        # Filtrar por fecha y turno
-        df_filtrado = df_comisiones[
-            (df_comisiones['Fecha'] == fecha.strftime('%Y-%m-%d')) & 
-            (df_comisiones['Turno'] == turno)
+        # Filtrar por operador y semana
+        df_operador = df_comisiones[
+            (df_comisiones['Operador'] == operador) & 
+            (df_comisiones['Inicio_Semana'] == fecha_inicio_semana.strftime('%Y-%m-%d'))
         ]
         
-        return df_filtrado.to_dict('records')
+        if df_operador.empty:
+            return None
+        
+        # Procesar datos
+        detalle_diario = {}
+        total_puntadas = 0
+        total_pedidos = 0
+        
+        for _, row in df_operador.iterrows():
+            fecha = row['Fecha_Dia']
+            puntadas = int(float(row['Puntadas'])) if row['Puntadas'] else 0
+            comision = float(row['Comision']) if row['Comision'] else 0
+            pedidos = int(row['Pedidos']) if row['Pedidos'] else 0
+            
+            detalle_diario[fecha] = {
+                'puntadas': puntadas,
+                'comision': comision,
+                'pedidos': pedidos
+            }
+            
+            total_puntadas += puntadas
+            total_pedidos += pedidos
+        
+        return {
+            'detalle_diario': detalle_diario,
+            'total_puntadas': total_puntadas,
+            'total_pedidos': total_pedidos
+        }
         
     except Exception as e:
-        st.info("ℹ️ No hay comisiones guardadas para este turno")
-        return []
+        st.error(f"❌ Error al cargar comisiones: {str(e)}")
+        return None
 
-def guardar_comision_individual(fecha, turno, operador, puntadas, comision_base, compensacion, total):
-    """Guardar una comisión individual en Sheets"""
+def guardar_confirmacion_operador(operador, fecha_semana, comision_total):
+    """Guardar confirmación de visualización del operador"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
@@ -278,26 +391,21 @@ def guardar_comision_individual(fecha, turno, operador, puntadas, comision_base,
         gc = gspread.authorize(creds)
         
         sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
-        worksheet = gc.open_by_key(sheet_id).worksheet("comisiones_manuales")
+        worksheet = gc.open_by_key(sheet_id).worksheet("confirmaciones_comisiones")
         
-        # Preparar datos
+        # Guardar confirmación
         nueva_fila = [
-            fecha.strftime('%Y-%m-%d'),
-            turno,
             operador,
-            puntadas,
-            comision_base,
-            compensacion,
-            total,
-            "Sistema",  # Autorizado por
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            fecha_semana.strftime('%Y-%m-%d'),
+            comision_total,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "CONFIRMADO"
         ]
         
-        # Agregar fila
         worksheet.append_row(nueva_fila)
-        st.success(f"✅ Comisión guardada para {operador}")
         
     except Exception as e:
+        st.error(f"❌ Error al guardar confirmación: {str(e)}")
         st.error(f"❌ Error al guardar: {str(e)}")
 
 def guardar_todas_comisiones(fecha, turno, puntadas_operadores):
