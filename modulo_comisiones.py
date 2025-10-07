@@ -98,7 +98,7 @@ def mostrar_comisiones_operador():
     st.subheader("👷 Consulta de Comisiones - Operador")
     
     # ✅ LISTA DE OPERADORES (podría venir de una base de datos)
-    operadores = ["OPERADOR_A", "OPERADOR_B", "OPERADOR_C", "OPERADOR_D", "OPERADOR_E"]
+    operadores = ["Susi", "Juanito", "Esmeralda", "Rigoberto", "Maricela"]
     operador_seleccionado = st.selectbox("Selecciona tu nombre:", operadores)
     
     # ✅ CONSULTAR SEMANA
