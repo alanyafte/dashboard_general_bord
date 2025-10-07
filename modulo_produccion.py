@@ -6,6 +6,7 @@ import numpy as np
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from datetime import datedelta
 
 def mostrar_dashboard_produccion():
     try:
