@@ -6,6 +6,7 @@ import numpy as np
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from datetime import timedelta
 
 def mostrar_dashboard_produccion():
     try:
@@ -583,11 +584,595 @@ def calcular_puntadas_automaticas(df):
     else:
         st.info("👆 Configura las máquinas, selecciona operadores y haz clic en 'Calcular'")
         return df
+# ============================================================
+# ✅ NUEVAS FUNCIONES PARA SISTEMA DE COMISIONES
+# ============================================================
+
+def calcular_comision_sugerida(puntadas):
+    """Calcular comisión sugerida basada en puntadas"""
+    if puntadas >= 200000:
+        return 300.0
+    elif puntadas >= 150000:
+        return 250.0
+    elif puntadas >= 100000:
+        return 200.0
+    elif puntadas >= 50000:
+        return 150.0
+    elif puntadas >= 25000:
+        return 100.0
+    else:
+        return 50.0
+
+def filtrar_por_fecha_turno(df, fecha, turno):
+    """Filtrar DataFrame por fecha y turno"""
+    df_fecha = df.copy()
+    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
+    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
+    df_fecha['Hora'] = df_fecha['Marca temporal'].dt.hour
+    
+    # Filtrar por fecha
+    df_filtrado = df_fecha[df_fecha['Fecha'] == fecha]
+    
+    if turno == "MAÑANA":
+        return df_filtrado[df_filtrado['Hora'].between(5, 15)]
+    elif turno == "TARDE":
+        return df_filtrado[df_filtrado['Hora'].between(13, 23)]
+    else:  # TODO EL DÍA
+        return df_filtrado
+
+def calcular_puntadas_dia_completo(df, fecha):
+    """Calcular puntadas para todo el día (sin filtro de turno)"""
+    df_fecha = df.copy()
+    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
+    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
+    
+    # Filtrar por fecha
+    df_dia = df_fecha[df_fecha['Fecha'] == fecha]
+    
+    if df_dia.empty:
+        st.error(f"❌ No hay registros para la fecha {fecha}")
+        return {}
+    
+    # Agrupar por operador
+    puntadas_por_operador = df_dia.groupby('OPERADOR').agg({
+        'PUNTADAS': 'sum',
+        '#DE PEDIDO': 'count'
+    }).to_dict('index')
+    
+    # Formatear resultado
+    resultado = {}
+    for operador, datos in puntadas_por_operador.items():
+        resultado[operador] = {
+            'puntadas': datos['PUNTADAS'],
+            'pedidos': datos['#DE PEDIDO']
+        }
+    
+    return resultado
+
+def calcular_puntadas_turno(df, fecha, turno):
+    """Calcular puntadas por operador para un turno específico"""
+    df_fecha = df.copy()
+    df_fecha['Marca temporal'] = pd.to_datetime(df_fecha['Marca temporal'], errors='coerce')
+    df_fecha['Fecha'] = df_fecha['Marca temporal'].dt.date
+    df_fecha['Hora'] = df_fecha['Marca temporal'].dt.hour
+    
+    # Filtrar por fecha
+    df_dia = df_fecha[df_fecha['Fecha'] == fecha]
+    
+    if df_dia.empty:
+        st.error("❌ No hay registros para esta fecha")
+        return {}
+    
+    # Filtrar por turno
+    if turno == "MAÑANA":
+        df_turno = df_dia[df_dia['Hora'].between(5, 15)]
+    else:  # TARDE
+        df_turno = df_dia[df_dia['Hora'].between(13, 23)]
+    
+    if df_turno.empty:
+        st.warning(f"⚠️ No hay registros en el turno {turno}")
+        return {}
+    
+    # Agrupar por operador
+    puntadas_por_operador = df_turno.groupby('OPERADOR').agg({
+        'PUNTADAS': 'sum',
+        '#DE PEDIDO': 'count'
+    }).to_dict('index')
+    
+    # Formatear resultado
+    resultado = {}
+    for operador, datos in puntadas_por_operador.items():
+        resultado[operador] = {
+            'puntadas': datos['PUNTADAS'],
+            'pedidos': datos['#DE PEDIDO']
+        }
+    
+    return resultado
+
+def sistema_comisiones_completo(df):
+    """Sistema completo de comisiones con historial en Google Sheets"""
+    
+    st.header("💰 Sistema de Comisiones - Historial y Asignación")
+    
+    # ✅ VERIFICACIÓN DE ACCESO
+    contraseña = st.text_input("🔐 Contraseña de Encargado:", type="password", key="comisiones_sistema_pass")
+    if contraseña != "encargado123":
+        st.warning("⛔ Ingresa la contraseña de encargado para acceder")
+        return
+    
+    st.success("✅ Acceso concedido - Modo Encargado")
+    
+    # ✅ PESTAÑAS PARA DIFERENTES FUNCIONALIDADES
+    tab1, tab2, tab3 = st.tabs(["📊 Calcular Comisiones", "💵 Asignar Comisiones Manuales", "📈 Historial y Dashboard"])
+    
+    with tab1:
+        calcular_y_guardar_comisiones(df)
+    
+    with tab2:
+        asignar_comisiones_manuales()
+    
+    with tab3:
+        mostrar_historial_comisiones()
+
+def calcular_y_guardar_comisiones(df):
+    """Calcular comisiones automáticas y guardar en Google Sheets"""
+    
+    st.subheader("🧮 Calcular Comisiones Automáticas")
+    
+    # ✅ CONFIGURACIÓN DE FECHA
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_calculo = st.date_input("Fecha de producción:", value=datetime.now().date())
+    with col2:
+        turno_calculo = st.selectbox("Turno:", ["MAÑANA", "TARDE", "TODO EL DÍA"])
+    
+    # ✅ CONFIGURACIÓN DE MÁQUINAS
+    st.write("### ⚙️ Configurar Cabezas por Operador")
+    
+    operadores = sorted(df["OPERADOR"].unique())
+    config_maquinas = {}
+    
+    cols = st.columns(3)
+    for i, operador in enumerate(operadores):
+        with cols[i % 3]:
+            cabezas = st.number_input(
+                f"{operador}",
+                min_value=1,
+                value=6,
+                key=f"cabezas_calc_{operador}",
+                help=f"Cabezas para {operador}"
+            )
+            config_maquinas[operador] = cabezas
+    
+    # ✅ BOTÓN DE CÁLCULO
+    if st.button("🔄 Calcular y Guardar en Historial", type="primary", use_container_width=True):
+        
+        with st.spinner("Calculando comisiones..."):
+            # Calcular puntadas con múltiplos
+            resultados = calcular_puntadas_con_multiples(df, fecha_calculo, turno_calculo, config_maquinas)
+            
+            if resultados:
+                # Guardar en Google Sheets
+                guardar_calculo_comisiones(resultados, fecha_calculo, turno_calculo)
+                st.success("✅ Cálculos guardados en historial")
+
+def calcular_puntadas_con_multiples(df, fecha, turno, config_maquinas):
+    """Calcular puntadas con múltiplos y cambios de color"""
+    
+    try:
+        # Filtrar datos por fecha y turno
+        df_filtrado = filtrar_por_fecha_turno(df, fecha, turno)
+        
+        if df_filtrado.empty:
+            st.error("❌ No hay datos para el período seleccionado")
+            return None
+        
+        resultados_operadores = {}
+        
+        for operador in df_filtrado["OPERADOR"].unique():
+            df_operador = df_filtrado[df_filtrado["OPERADOR"] == operador]
+            cabezas = config_maquinas.get(operador, 6)
+            
+            total_puntadas_multiplos = 0
+            total_puntadas_base = 0
+            
+            for _, orden in df_operador.iterrows():
+                piezas = orden["CANTIDAD"]
+                puntadas_base = orden["PUNTADAS"]
+                
+                # Calcular múltiplos
+                pasadas = np.ceil(piezas / cabezas)
+                multiplo = pasadas * cabezas
+                puntadas_ajustadas = max(puntadas_base, 4000)
+                puntadas_multiplos = multiplo * puntadas_ajustadas
+                
+                total_puntadas_multiplos += puntadas_multiplos
+                total_puntadas_base += puntadas_base
+            
+            # Calcular cambios de color
+            ordenes_operador = len(df_operador)
+            puntadas_cambios = 36000 + (ordenes_operador * 18000)
+            total_puntadas = total_puntadas_multiplos + puntadas_cambios
+            
+            resultados_operadores[operador] = {
+                'ordenes': ordenes_operador,
+                'cabezas': cabezas,
+                'puntadas_base': total_puntadas_base,
+                'puntadas_multiplos': total_puntadas_multiplos,
+                'puntadas_cambios': puntadas_cambios,
+                'total_puntadas': total_puntadas,
+                'comision_sugerida': calcular_comision_sugerida(total_puntadas)
+            }
+        
+        return resultados_operadores
+        
+    except Exception as e:
+        st.error(f"❌ Error en cálculo: {str(e)}")
+        return None
+
+def guardar_calculo_comisiones(resultados, fecha, turno):
+    """Guardar cálculo de comisiones en Google Sheets"""
+    
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        
+        # Usar hoja existente o crear nueva
+        try:
+            worksheet = gc.open_by_key(sheet_id).worksheet("historial_comisiones")
+        except:
+            # Crear hoja si no existe
+            spreadsheet = gc.open_by_key(sheet_id)
+            worksheet = spreadsheet.add_worksheet(title="historial_comisiones", rows=1000, cols=20)
+            # Agregar headers
+            headers = [
+                "Fecha", "Turno", "Operador", "Ordenes", "Cabezas", 
+                "Puntadas_Base", "Puntadas_Multiplos", "Puntadas_Cambios", 
+                "Total_Puntadas", "Comision_Sugerida", "Comision_Asignada",
+                "Estado", "Timestamp"
+            ]
+            worksheet.append_row(headers)
+        
+        # Guardar cada operador
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        for operador, datos in resultados.items():
+            nueva_fila = [
+                fecha.strftime('%Y-%m-%d'),
+                turno,
+                operador,
+                datos['ordenes'],
+                datos['cabezas'],
+                datos['puntadas_base'],
+                datos['puntadas_multiplos'],
+                datos['puntadas_cambios'],
+                datos['total_puntadas'],
+                datos['comision_sugerida'],
+                0,  # Comision_Asignada (se llena después)
+                "CALCULADO",
+                timestamp
+            ]
+            worksheet.append_row(nueva_fila)
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Error guardando en Sheets: {str(e)}")
+        return False
+
+def asignar_comisiones_manuales():
+    """Asignar comisiones manualmente basado en cálculos guardados"""
+    
+    st.subheader("💵 Asignar Comisiones Manuales")
+    
+    # ✅ CARGAR CÁLCULOS GUARDADOS
+    calculos = cargar_calculos_pendientes()
+    
+    if not calculos:
+        st.info("ℹ️ No hay cálculos pendientes de asignación")
+        return
+    
+    # ✅ FILTRAR POR FECHA
+    fechas_disponibles = sorted(set(calc['Fecha'] for calc in calculos))
+    fecha_seleccionada = st.selectbox("Seleccionar fecha:", fechas_disponibles)
+    
+    # Filtrar cálculos de la fecha seleccionada
+    calculos_fecha = [calc for calc in calculos if calc['Fecha'] == fecha_seleccionada]
+    
+    st.write(f"### 📊 Cálculos para {fecha_seleccionada}")
+    
+    total_comisiones = 0
+    comisiones_asignadas = {}
+    
+    for calculo in calculos_fecha:
+        with st.expander(f"👤 {calculo['Operador']} - {int(float(calculo['Total_Puntadas'])):,} puntadas", expanded=True):
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.write(f"**Detalle de producción:**")
+                st.write(f"- Órdenes: {calculo['Ordenes']}")
+                st.write(f"- Puntadas base: {int(float(calculo['Puntadas_Base'])):,}")
+                st.write(f"- Puntadas múltiplos: {int(float(calculo['Puntadas_Multiplos'])):,}")
+                st.write(f"- Puntadas cambios: {int(float(calculo['Puntadas_Cambios'])):,}")
+                st.write(f"- **Total: {int(float(calculo['Total_Puntadas'])):,}**")
+                st.write(f"💡 Sugerido: ${float(calculo['Comision_Sugerida']):.2f}")
+            
+            with col2:
+                comision_asignada = st.number_input(
+                    "Comisión asignada ($):",
+                    min_value=0.0,
+                    max_value=1000.0,
+                    value=float(calculo['Comision_Sugerida']),
+                    key=f"asignar_{calculo['Operador']}_{fecha_seleccionada}"
+                )
+                
+                if st.button("💾 Guardar Comisión", key=f"guardar_{calculo['Operador']}"):
+                    if guardar_comision_asignada(calculo, comision_asignada):
+                        st.success(f"✅ ${comision_asignada:.2f} asignado a {calculo['Operador']}")
+            
+            comisiones_asignadas[calculo['Operador']] = comision_asignada
+            total_comisiones += comision_asignada
+    
+    # ✅ RESUMEN
+    if comisiones_asignadas:
+        st.subheader("📋 Resumen de Asignaciones")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Operadores", len(comisiones_asignadas))
+        with col2:
+            st.metric("Total Asignado", f"${total_comisiones:.2f}")
+        with col3:
+            st.metric("Promedio", f"${total_comisiones/len(comisiones_asignadas):.2f}")
+
+def cargar_calculos_pendientes():
+    """Cargar cálculos pendientes de asignación desde Google Sheets"""
+    
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        
+        try:
+            worksheet = gc.open_by_key(sheet_id).worksheet("historial_comisiones")
+            data = worksheet.get_all_values()
+            
+            if len(data) <= 1:
+                return []
+            
+            # Convertir a DataFrame
+            df = pd.DataFrame(data[1:], columns=data[0])
+            
+            # Filtrar solo cálculos pendientes de asignación
+            df_pendientes = df[df['Estado'] == 'CALCULADO']
+            
+            return df_pendientes.to_dict('records')
+            
+        except Exception as e:
+            st.info("ℹ️ No hay historial de comisiones aún")
+            return []
+        
+    except Exception as e:
+        st.error(f"❌ Error cargando cálculos: {str(e)}")
+        return []
+
+def guardar_comision_asignada(calculo, comision_asignada):
+    """Actualizar el cálculo con la comisión asignada"""
+    
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        worksheet = gc.open_by_key(sheet_id).worksheet("historial_comisiones")
+        
+        # Buscar todas las filas para encontrar la correcta
+        data = worksheet.get_all_values()
+        
+        for i, row in enumerate(data[1:], start=2):  # Empezar desde fila 2 (después del header)
+            if (row[0] == calculo['Fecha'] and  # Fecha
+                row[2] == calculo['Operador'] and  # Operador
+                row[11] == 'CALCULADO'):  # Estado
+                
+                # Actualizar comisión asignada y estado
+                worksheet.update_cell(i, 11, comision_asignada)  # Columna Comision_Asignada
+                worksheet.update_cell(i, 12, "ASIGNADO")  # Columna Estado
+                worksheet.update_cell(i, 13, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))  # Actualizar timestamp
+                
+                return True
+        
+        st.error("❌ No se encontró el cálculo para actualizar")
+        return False
+        
+    except Exception as e:
+        st.error(f"❌ Error guardando comisión: {str(e)}")
+        return False
+
+def mostrar_historial_comisiones():
+    """Mostrar dashboard con historial de comisiones"""
+    
+    st.subheader("📈 Historial y Dashboard de Comisiones")
+    
+    # ✅ CARGAR TODO EL HISTORIAL
+    historial = cargar_historial_completo()
+    
+    if not historial:
+        st.info("ℹ️ No hay historial de comisiones disponible")
+        return
+    
+    # Convertir a DataFrame para análisis
+    df_historial = pd.DataFrame(historial)
+    
+    # Convertir columnas numéricas
+    columnas_numericas = ['Puntadas_Base', 'Puntadas_Multiplos', 'Puntadas_Cambios', 'Total_Puntadas', 'Comision_Sugerida', 'Comision_Asignada']
+    for col in columnas_numericas:
+        if col in df_historial.columns:
+            df_historial[col] = pd.to_numeric(df_historial[col], errors='coerce')
+    
+    # ✅ FILTROS
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fecha_inicio = st.date_input("Fecha inicio:", value=datetime.now().date() - timedelta(days=30))
+    with col2:
+        fecha_fin = st.date_input("Fecha fin:", value=datetime.now().date())
+    with col3:
+        operador_filtro = st.selectbox("Operador:", ["TODOS"] + sorted(df_historial['Operador'].unique()))
+    
+    # Aplicar filtros
+    mask = (df_historial['Fecha'] >= fecha_inicio.strftime('%Y-%m-%d')) & (df_historial['Fecha'] <= fecha_fin.strftime('%Y-%m-%d'))
+    if operador_filtro != "TODOS":
+        mask = mask & (df_historial['Operador'] == operador_filtro)
+    
+    df_filtrado = df_historial[mask]
+    
+    if df_filtrado.empty:
+        st.warning("⚠️ No hay datos con los filtros seleccionados")
+        return
+    
+    # ✅ MÉTRICAS PRINCIPALES
+    st.subheader("🏆 Resumen Ejecutivo")
+    
+    total_comisiones = df_filtrado['Comision_Asignada'].sum()
+    total_puntadas = df_filtrado['Total_Puntadas'].sum()
+    total_operadores = df_filtrado['Operador'].nunique()
+    total_dias = df_filtrado['Fecha'].nunique()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Total Comisiones", f"${total_comisiones:,.2f}")
+    with col2:
+        st.metric("🪡 Total Puntadas", f"{total_puntadas:,.0f}")
+    with col3:
+        st.metric("👥 Operadores", total_operadores)
+    with col4:
+        st.metric("📅 Días", total_dias)
+    
+    # ✅ GRÁFICOS
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Comisiones por operador
+        comisiones_operador = df_filtrado.groupby('Operador')['Comision_Asignada'].sum().sort_values(ascending=False)
+        if not comisiones_operador.empty:
+            st.bar_chart(comisiones_operador)
+            st.write("**Comisiones por Operador**")
+    
+    with col2:
+        # Evolución temporal
+        if 'Fecha' in df_filtrado.columns and not df_filtrado.empty:
+            comisiones_diarias = df_filtrado.groupby('Fecha')['Comision_Asignada'].sum()
+            if not comisiones_diarias.empty:
+                st.line_chart(comisiones_diarias)
+                st.write("**Evolución de Comisiones**")
+    
+    # ✅ TABLA DETALLADA
+    st.subheader("📋 Detalle de Comisiones")
+    
+    # Seleccionar y formatear columnas para mostrar
+    columnas_mostrar = ['Fecha', 'Turno', 'Operador', 'Total_Puntadas', 'Comision_Asignada', 'Estado']
+    df_display = df_filtrado[columnas_mostrar].copy()
+    df_display['Total_Puntadas'] = df_display['Total_Puntadas'].apply(lambda x: f"{x:,.0f}")
+    df_display['Comision_Asignada'] = df_display['Comision_Asignada'].apply(lambda x: f"${x:.2f}")
+    
+    st.dataframe(df_display, use_container_width=True)
+
+def cargar_historial_completo():
+    """Cargar todo el historial de comisiones"""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        
+        try:
+            worksheet = gc.open_by_key(sheet_id).worksheet("historial_comisiones")
+            data = worksheet.get_all_values()
+            
+            if len(data) <= 1:
+                return []
+            
+            # Convertir a DataFrame y luego a lista de diccionarios
+            df = pd.DataFrame(data[1:], columns=data[0])
+            return df.to_dict('records')
+            
+        except Exception as e:
+            st.info("ℹ️ No hay historial de comisiones disponible")
+            return []
+        
+    except Exception as e:
+        st.error(f"❌ Error cargando historial: {str(e)}")
+        return []
+
 
 def mostrar_interfaz_dashboard(df):
     """Interfaz principal del dashboard"""
     
     st.title("🏭 Dashboard de Producción")
+
+    # ✅ AGREGAR OPCIÓN DE COMISIONES EN EL DASHBOARD
+    opcion = st.selectbox(
+        "Selecciona la vista:",
+        ["📊 Dashboard General", "💰 Sistema de Comisiones"]
+    )
+    
+    if opcion == "💰 Sistema de Comisiones":
+        sistema_comisiones_completo(df)
+        return
     
     # Mostrar resumen rápido
     st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
