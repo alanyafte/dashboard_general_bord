@@ -339,8 +339,17 @@ def guardar_calculos_en_sheets(df_calculado):
         # Limpiar la hoja existente y escribir nuevos datos
         worksheet.clear()
         
+        # ✅ CONVERTIR FECHAS A STRING ANTES DE GUARDAR
+        df_para_guardar = df_calculado.copy()
+        
+        # Convertir columnas de fecha a string
+        date_columns = ['FECHA', 'FECHA_CALCULO']
+        for col in date_columns:
+            if col in df_para_guardar.columns:
+                df_para_guardar[col] = df_para_guardar[col].astype(str)
+        
         # Convertir DataFrame a lista de listas
-        datos_para_guardar = [df_calculado.columns.tolist()] + df_calculado.values.tolist()
+        datos_para_guardar = [df_para_guardar.columns.tolist()] + df_para_guardar.values.tolist()
         
         # Escribir todos los datos
         worksheet.update('A1', datos_para_guardar)
@@ -454,11 +463,11 @@ def mostrar_consultas_operadores(df_calculado):
             pedido_seleccionado = st.selectbox("Filtrar por pedido:", ["Todos"] + pedidos)
         
         # Aplicar filtros
-        if fecha_seleccionada != "Todas":
+        if fecha_seleccionada != "Todas" and 'FECHA' in df_operador.columns:
             df_operador = df_operador[df_operador["FECHA"] == fecha_seleccionada]
         if pedido_seleccionado != "Todos":
             df_operador = df_operador[df_operador["PEDIDO"] == pedido_seleccionado]
-        
+            
         # Mostrar métricas del operador
         st.subheader(f"📊 Resumen de {operador_seleccionado}")
         
@@ -475,11 +484,11 @@ def mostrar_consultas_operadores(df_calculado):
             with col3:
                 st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
             
-            # Gráfico de puntadas por fecha
-            st.subheader("📈 Evolución de Puntadas")
-            puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
-            
-            if len(puntadas_por_fecha) > 1:
+             # Gráfico de puntadas por fecha
+            if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
+                st.subheader("📈 Evolución de Puntadas")
+                puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
+                
                 fig = px.line(
                     puntadas_por_fecha,
                     x="FECHA",
@@ -488,8 +497,6 @@ def mostrar_consultas_operadores(df_calculado):
                     markers=True
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Se necesita más de una fecha para mostrar la evolución")
             
             # Detalle de pedidos
             st.subheader("📋 Detalle de Pedidos")
@@ -498,6 +505,13 @@ def mostrar_consultas_operadores(df_calculado):
             columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
             
             st.dataframe(df_operador[columnas_disponibles], use_container_width=True)
+
+            # ✅ CONVERTIR FECHAS A STRING PARA MOSTRAR MEJOR
+            df_mostrar = df_operador[columnas_disponibles].copy()
+            if 'FECHA' in df_mostrar.columns:
+                df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
+            
+            st.dataframe(df_mostrar, use_container_width=True)
             
             # Opción para descargar
             csv = df_operador[columnas_disponibles].to_csv(index=False)
