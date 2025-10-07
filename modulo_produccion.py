@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 from datetime import timedelta
 
-# ✅ PRIMERO: Las funciones de utilidad y limpieza (las que ya tienes)
+# ✅ FUNCIONES DE LIMPIEZA Y ANÁLISIS (las que ya tenías)
 def limpiar_dataframe(df_raw):
     """Limpiar y procesar el dataframe"""
     df = df_raw.copy()
@@ -307,8 +307,7 @@ def mostrar_tendencias_temporales(df):
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-# ✅ LUEGO: Las NUEVAS funciones que te di (con cálculos persistentes)
-
+# ✅ NUEVAS FUNCIONES PARA CÁLCULOS AUTOMÁTICOS
 def guardar_calculos_en_sheets(df_calculado):
     """Guardar los cálculos en una nueva hoja de Google Sheets"""
     try:
@@ -351,206 +350,94 @@ def guardar_calculos_en_sheets(df_calculado):
         st.error(f"❌ Error al guardar cálculos: {str(e)}")
         return False
 
-def calcular_puntadas_automaticas(df, df_calculado_existente=None):
-    """Calcular automáticamente las puntadas y guardar en Google Sheets"""
+def calcular_puntadas_automaticamente(df):
+    """Calcular automáticamente las puntadas cuando se cargan los datos"""
     
-    st.header("🧵 Cálculo Automático de Puntadas")
+    # CONFIGURACIÓN FIJA DE MÁQUINAS (puedes ajustar estos valores)
+    CONFIG_MAQUINAS = {
+        "Susi": 6,
+        "Juanito": 6,
+        "Esmeralda": 6,
+        "Rigoberto": 6,
+        "Maricela": 2,
+        # Agrega más operadores según necesites
+    }
     
-    # ✅ CONFIGURACIÓN DE MÁQUINAS POR OPERADOR
-    st.subheader("⚙️ Configuración de Máquinas")
+    # Valor por defecto si el operador no está en la configuración
+    CABEZAS_POR_DEFECTO = 6
     
-    if "OPERADOR" not in df.columns or "Marca temporal" not in df.columns:
-        st.error("❌ Se necesitan las columnas 'OPERADOR' y 'Marca temporal'")
-        return df, df_calculado_existente
+    if df.empty or "OPERADOR" not in df.columns:
+        return pd.DataFrame()
     
-    operadores = sorted(df["OPERADOR"].unique())
+    resultados = []
     
-    config_maquinas = {}
-    for operador in operadores:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.write(f"**{operador}**")
-        with col2:
-            cabezas = st.number_input(
-                f"Cabezas {operador}",
-                min_value=1,
-                value=6,
-                key=f"cabezas_{operador}"
-            )
-            config_maquinas[operador] = cabezas
-    
-    # ✅ CONFIGURACIÓN DE FECHAS PARA CÁLCULO
-    st.subheader("📅 Configuración de Período")
-    
-    df_fechas = df.copy()
-    df_fechas['Fecha'] = df_fechas['Marca temporal'].dt.date
-    fechas_disponibles = sorted(df_fechas['Fecha'].unique())
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.selectbox(
-            "Fecha de inicio:",
-            options=fechas_disponibles,
-            index=0
-        )
-    with col2:
-        fecha_fin = st.selectbox(
-            "Fecha de fin:",
-            options=fechas_disponibles,
-            index=len(fechas_disponibles)-1
-        )
-    
-    # Filtrar datos por rango de fechas seleccionado
-    mask = (df_fechas['Fecha'] >= fecha_inicio) & (df_fechas['Fecha'] <= fecha_fin)
-    df_periodo = df_fechas[mask]
-    
-    st.info(f"📊 Datos del período {fecha_inicio} a {fecha_fin}: {len(df_periodo)} registros")
-    
-    if st.button("🔄 Calcular y Guardar Puntadas", type="primary"):
+    for idx, fila in df.iterrows():
+        operador = fila["OPERADOR"]
+        cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
         
-        if "CANTIDAD" not in df_periodo.columns or "PUNTADAS" not in df_periodo.columns:
-            st.error("❌ Se necesitan las columnas 'CANTIDAD' y 'PUNTADAS'")
-            return df, df_calculado_existente
-        
-        # ✅ CALCULAR PUNTADAS PARA TODO EL PERÍODO
-        resultados = []
-        totales_operador = {}
-        
-        with st.spinner("Calculando puntadas..."):
-            for operador in operadores:
-                # Filtrar órdenes del operador en el PERÍODO
-                df_operador = df_periodo[df_periodo["OPERADOR"] == operador].copy()
-                cabezas = config_maquinas[operador]
-                
-                if len(df_operador) == 0:
-                    continue
-                
-                # Agrupar por fecha para calcular cambios de color por día
-                df_operador['Fecha'] = df_operador['Marca temporal'].dt.date
-                fechas_operador = df_operador['Fecha'].unique()
-                
-                for fecha in fechas_operador:
-                    df_dia = df_operador[df_operador['Fecha'] == fecha]
-                    ordenes_dia = len(df_dia)
-                    
-                    # Calcular para cada orden del día
-                    for idx, orden in df_dia.iterrows():
-                        piezas = orden["CANTIDAD"]
-                        puntadas_base = orden["PUNTADAS"]
-                        
-                        # Calcular múltiplos
-                        pasadas = np.ceil(piezas / cabezas)
-                        multiplo = pasadas * cabezas
-                        puntadas_ajustadas = max(puntadas_base, 4000)
-                        puntadas_multiplos = multiplo * puntadas_ajustadas
-                        
-                        # Calcular cambios de color (36,000 por turno + 18,000 por orden)
-                        puntadas_cambios = 36000 + (ordenes_dia * 18000)
-                        total_puntadas = puntadas_multiplos + puntadas_cambios
-                        
-                        resultados.append({
-                            'OPERADOR': operador,
-                            'FECHA': fecha,
-                            'PEDIDO': orden.get('#DE PEDIDO', 'N/A'),
-                            'TIPO_PRENDA': orden.get('TIPO DE PRENDA', 'N/A'),
-                            'DISEÑO': orden.get('DISEÑO', 'N/A'),
-                            'CANTIDAD': piezas,
-                            'PUNTADAS_BASE': puntadas_base,
-                            'CABEZAS': cabezas,
-                            'PASADAS': pasadas,
-                            'MULTIPLO': multiplo,
-                            'PUNTADAS_MULTIPLOS': puntadas_multiplos,
-                            'PUNTADAS_CAMBIOS': puntadas_cambios,
-                            'TOTAL_PUNTADAS': total_puntadas,
-                            'FECHA_CALCULO': datetime.now().date(),
-                            'HORA_CALCULO': datetime.now().strftime("%H:%M:%S")
-                        })
-                    
-                    # Acumular totales por operador
-                    if operador not in totales_operador:
-                        totales_operador[operador] = {
-                            'ordenes': 0,
-                            'puntadas_multiplos': 0,
-                            'puntadas_cambios': 0,
-                            'total': 0
-                        }
-                    
-                    totales_operador[operador]['ordenes'] += ordenes_dia
-                    totales_operador[operador]['puntadas_multiplos'] += sum(r['PUNTADAS_MULTIPLOS'] for r in resultados if r['OPERADOR'] == operador and r['FECHA'] == fecha)
-                    totales_operador[operador]['puntadas_cambios'] += puntadas_cambios
-                    totales_operador[operador]['total'] += sum(r['TOTAL_PUNTADAS'] for r in resultados if r['OPERADOR'] == operador and r['FECHA'] == fecha)
-        
-        # ✅ CREAR DATAFRAME CON RESULTADOS
-        df_resultados = pd.DataFrame(resultados)
-        
-        # ✅ COMBINAR CON CÁLCULOS EXISTENTES (si los hay)
-        if df_calculado_existente is not None and not df_calculado_existente.empty:
-            # Eliminar duplicados (mantener los cálculos más recientes)
-            columnas_comparar = ['OPERADOR', 'FECHA', 'PEDIDO']
-            df_combinado = pd.concat([df_calculado_existente, df_resultados]).drop_duplicates(
-                subset=columnas_comparar, 
-                keep='last'
-            )
-        else:
-            df_combinado = df_resultados
-        
-        # ✅ GUARDAR EN GOOGLE SHEETS
-        if guardar_calculos_en_sheets(df_combinado):
-            st.success("✅ Cálculos guardados exitosamente en Google Sheets")
-            st.session_state.df_calculado = df_combinado
-        else:
-            st.error("❌ Error al guardar los cálculos")
-        
-        # ✅ MOSTRAR RESULTADOS DEL PERÍODO
-        st.subheader(f"📊 Resultados del Período {fecha_inicio} a {fecha_fin}")
-        
-        for operador, datos in totales_operador.items():
-            st.write(f"**👤 {operador}** (Máquina de {config_maquinas[operador]} cabezas)")
+        # Verificar que tenemos los datos necesarios
+        if pd.isna(fila.get("CANTIDAD")) or pd.isna(fila.get("PUNTADAS")):
+            continue
             
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Órdenes", datos['ordenes'])
-            with col2:
-                st.metric("Puntadas Múltiplos", f"{datos['puntadas_multiplos']:,.0f}")
-            with col3:
-                st.metric("Puntadas Cambios", f"{datos['puntadas_cambios']:,.0f}")
-            with col4:
-                st.metric("**TOTAL**", f"**{datos['total']:,.0f}**")
+        piezas = fila["CANTIDAD"]
+        puntadas_base = fila["PUNTADAS"]
         
-        # ✅ RESUMEN GENERAL DEL PERÍODO
-        st.subheader(f"🏆 Resumen General del Período")
+        # Calcular múltiplos
+        pasadas = np.ceil(piezas / cabezas)
+        multiplo = pasadas * cabezas
+        puntadas_ajustadas = max(puntadas_base, 4000)
+        puntadas_multiplos = multiplo * puntadas_ajustadas
         
-        total_general = sum(datos['total'] for datos in totales_operador.values())
-        total_multiplos_general = sum(datos['puntadas_multiplos'] for datos in totales_operador.values())
-        total_cambios_general = sum(datos['puntadas_cambios'] for datos in totales_operador.values())
+        # Agrupar por fecha para calcular cambios de color
+        fecha = fila["Marca temporal"].date() if pd.notna(fila.get("Marca temporal")) else datetime.now().date()
         
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Operadores Activos", len(totales_operador))
-        with col2:
-            st.metric("Total Puntadas Múltiplos", f"{total_multiplos_general:,.0f}")
-        with col3:
-            st.metric("Total Puntadas Cambios", f"{total_cambios_general:,.0f}")
-        with col4:
-            st.metric("**TOTAL PERÍODO**", f"**{total_general:,.0f}**")
+        # Contar órdenes del mismo operador en la misma fecha
+        mismo_dia = df[
+            (df["OPERADOR"] == operador) & 
+            (df["Marca temporal"].dt.date == fecha)
+        ]
+        ordenes_dia = len(mismo_dia)
         
-        return df, df_combinado
+        # Calcular cambios de color (36,000 por turno + 18,000 por orden)
+        puntadas_cambios = 36000 + (ordenes_dia * 18000)
+        total_puntadas = puntadas_multiplos + puntadas_cambios
+        
+        resultados.append({
+            'OPERADOR': operador,
+            'FECHA': fecha,
+            'PEDIDO': fila.get('#DE PEDIDO', 'N/A'),
+            'TIPO_PRENDA': fila.get('TIPO DE PRENDA', 'N/A'),
+            'DISEÑO': fila.get('DISEÑO', 'N/A'),
+            'CANTIDAD': piezas,
+            'PUNTADAS_BASE': puntadas_base,
+            'CABEZAS': cabezas,
+            'PASADAS': pasadas,
+            'MULTIPLO': multiplo,
+            'PUNTADAS_MULTIPLOS': puntadas_multiplos,
+            'PUNTADAS_CAMBIOS': puntadas_cambios,
+            'TOTAL_PUNTADAS': total_puntadas,
+            'FECHA_CALCULO': datetime.now().date(),
+            'HORA_CALCULO': datetime.now().strftime("%H:%M:%S")
+        })
     
-    else:
-        st.info("👆 Configura las fechas y haz clic en 'Calcular y Guardar Puntadas'")
-        return df, df_calculado_existente
+    return pd.DataFrame(resultados)
 
 def mostrar_consultas_operadores(df_calculado):
     """Interfaz para que los operadores consulten sus puntadas calculadas"""
     
     if df_calculado is None or df_calculado.empty:
-        st.info("ℹ️ No hay cálculos guardados. Ejecuta el cálculo automático primero.")
+        st.info("ℹ️ No hay cálculos disponibles. Los cálculos se generan automáticamente.")
         return
     
     st.header("👤 Consulta de Puntadas por Operador")
     
     # Selección de operador
     operadores = sorted(df_calculado["OPERADOR"].unique())
+    
+    if not operadores:
+        st.info("No hay operadores con cálculos disponibles.")
+        return
+        
     operador_seleccionado = st.selectbox("Selecciona tu operador:", operadores)
     
     if operador_seleccionado:
@@ -592,14 +479,17 @@ def mostrar_consultas_operadores(df_calculado):
             st.subheader("📈 Evolución de Puntadas")
             puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
             
-            fig = px.line(
-                puntadas_por_fecha,
-                x="FECHA",
-                y="TOTAL_PUNTADAS",
-                title=f"Puntadas de {operador_seleccionado} por Fecha",
-                markers=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(puntadas_por_fecha) > 1:
+                fig = px.line(
+                    puntadas_por_fecha,
+                    x="FECHA",
+                    y="TOTAL_PUNTADAS",
+                    title=f"Puntadas de {operador_seleccionado} por Fecha",
+                    markers=True
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Se necesita más de una fecha para mostrar la evolución")
             
             # Detalle de pedidos
             st.subheader("📋 Detalle de Pedidos")
@@ -620,25 +510,19 @@ def mostrar_consultas_operadores(df_calculado):
         else:
             st.warning("No hay datos para los filtros seleccionados")
 
-# ✅ FINALMENTE: La función principal MODIFICADA
-
+# ✅ FUNCIÓN PRINCIPAL MODIFICADA
 def mostrar_dashboard_produccion():
     try:
         # ✅ BOTÓN DE REFRESH EN SIDEBAR
         st.sidebar.header("🔄 Actualizar Datos")
         if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
             # Limpiar cache de datos para forzar recarga
-            if 'df_produccion' in st.session_state:
-                del st.session_state['df_produccion']
-            if 'df_calculado' in st.session_state:
-                del st.session_state['df_calculado']
+            st.cache_data.clear()
             st.rerun()
-        
-        st.sidebar.info("Última actualización: " + datetime.now().strftime("%H:%M:%S"))
         
         # ✅ AUTENTICACIÓN CON CACHE
         @st.cache_data(ttl=300)  # Cache de 5 minutos
-        def cargar_datos_desde_sheets():
+        def cargar_y_calcular_datos():
             scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
             
             service_account_info = {
@@ -661,24 +545,28 @@ def mostrar_dashboard_produccion():
             data = worksheet.get_all_values()
             df_raw = pd.DataFrame(data[1:], columns=data[0])
             
-            # ✅ INTENTAR CARGAR DATOS CALCULADOS (si existen)
-            try:
-                worksheet_calculado = gc.open_by_key(sheet_id).worksheet("puntadas_calculadas")
-                data_calculado = worksheet_calculado.get_all_values()
-                if len(data_calculado) > 1:
-                    df_calculado = pd.DataFrame(data_calculado[1:], columns=data_calculado[0])
-                else:
-                    df_calculado = pd.DataFrame()
-            except:
-                df_calculado = pd.DataFrame()
+            # ✅ LIMPIAR DATOS
+            df = limpiar_dataframe(df_raw)
             
-            return df_raw, df_calculado
+            # ✅ CALCULAR PUNTADAS AUTOMÁTICAMENTE
+            df_calculado = calcular_puntadas_automaticamente(df)
+            
+            # ✅ GUARDAR CÁLCULOS EN SHEETS (si hay datos)
+            if not df_calculado.empty:
+                try:
+                    guardar_calculos_en_sheets(df_calculado)
+                except Exception as e:
+                    st.sidebar.warning(f"⚠️ No se pudieron guardar los cálculos: {e}")
+            
+            return df, df_calculado
         
-        # Cargar datos (usando cache)
-        df_raw, df_calculado = cargar_datos_desde_sheets()
+        # Cargar y calcular datos automáticamente
+        df, df_calculado = cargar_y_calcular_datos()
         
-        # ✅ LIMPIAR Y PROCESAR DATOS
-        df = limpiar_dataframe(df_raw)
+        st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
+        st.sidebar.info(f"📊 Registros: {len(df)}")
+        if not df_calculado.empty:
+            st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
         
         # ✅ MOSTRAR DASHBOARD
         mostrar_interfaz_dashboard(df, df_calculado)
@@ -695,13 +583,13 @@ def mostrar_interfaz_dashboard(df, df_calculado=None):
     # Mostrar resumen rápido
     st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
     if df_calculado is not None and not df_calculado.empty:
-        st.success(f"**Cálculos guardados:** {len(df_calculado)} registros calculados")
+        st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
     
     # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
     
     # ✅ PESTAÑAS PRINCIPALES
-    tab1, tab2, tab3 = st.tabs(["📊 Dashboard Principal", "🧵 Calcular Puntadas", "👤 Consultar Mis Puntadas"])
+    tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas"])
     
     with tab1:
         # ✅ MÉTRICAS PRINCIPALES
@@ -724,9 +612,6 @@ def mostrar_interfaz_dashboard(df, df_calculado=None):
         st.dataframe(df_filtrado, use_container_width=True, height=400)
     
     with tab2:
-        # ✅ CÁLCULO AUTOMÁTICO DE PUNTADAS
-        df_actualizado, df_calculado_actualizado = calcular_puntadas_automaticas(df_filtrado, df_calculado)
-    
-    with tab3:
-        # ✅ CONSULTA PARA OPERADORES
+        # ✅ CONSULTA PARA OPERADORES (SOLO LECTURA)
+        st.info("🔍 **Consulta tus puntadas calculadas automáticamente**")
         mostrar_consultas_operadores(df_calculado)
