@@ -466,57 +466,63 @@ def calcular_puntadas_automaticamente(df):
     
     resultados = []
     
-    for idx, fila in df.iterrows():
-        operador = fila["OPERADOR"]
+    # ✅ CORREGIDO: Primero agrupar por operador y fecha para calcular correctamente los cambios
+    df_con_fecha = df.copy()
+    df_con_fecha['Fecha'] = df_con_fecha['Marca temporal'].dt.date
+    
+    # Agrupar por operador y fecha
+    grupos = df_con_fecha.groupby(['OPERADOR', 'Fecha'])
+    
+    for (operador, fecha), grupo in grupos:
         cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
+        ordenes_dia = len(grupo)
         
-        # Verificar que tenemos los datos necesarios
-        if pd.isna(fila.get("CANTIDAD")) or pd.isna(fila.get("PUNTADAS")):
-            continue
+        # ✅ CORREGIDO: Calcular cambios de color por ORDEN (no por día completo)
+        for idx, (indice_fila, fila) in enumerate(grupo.iterrows()):
+            # Verificar que tenemos los datos necesarios
+            if pd.isna(fila.get("CANTIDAD")) or pd.isna(fila.get("PUNTADAS")):
+                continue
+                
+            piezas = fila["CANTIDAD"]
+            puntadas_base = fila["PUNTADAS"]
             
-        piezas = fila["CANTIDAD"]
-        puntadas_base = fila["PUNTADAS"]
-        
-        # Calcular múltiplos
-        pasadas = np.ceil(piezas / cabezas)
-        multiplo = pasadas * cabezas
-        puntadas_ajustadas = max(puntadas_base, 4000)
-        puntadas_multiplos = multiplo * puntadas_ajustadas
-        
-        # Agrupar por fecha para calcular cambios de color
-        fecha = fila["Marca temporal"].date() if pd.notna(fila.get("Marca temporal")) else datetime.now().date()
-        
-        # Contar órdenes del mismo operador en la misma fecha
-        mismo_dia = df[
-            (df["OPERADOR"] == operador) & 
-            (df["Marca temporal"].dt.date == fecha)
-        ]
-        ordenes_dia = len(mismo_dia)
-        
-        # Calcular cambios de color (36,000 por turno + 18,000 por orden)
-        puntadas_cambios = 36000 + (ordenes_dia * 18000)
-        total_puntadas = puntadas_multiplos + puntadas_cambios
-        
-        resultados.append({
-            'OPERADOR': operador,
-            'FECHA': fecha,
-            'PEDIDO': fila.get('#DE PEDIDO', 'N/A'),
-            'TIPO_PRENDA': fila.get('TIPO DE PRENDA', 'N/A'),
-            'DISEÑO': fila.get('DISEÑO', 'N/A'),
-            'CANTIDAD': piezas,
-            'PUNTADAS_BASE': puntadas_base,
-            'CABEZAS': cabezas,
-            'PASADAS': pasadas,
-            'MULTIPLO': multiplo,
-            'PUNTADAS_MULTIPLOS': puntadas_multiplos,
-            'PUNTADAS_CAMBIOS': puntadas_cambios,
-            'TOTAL_PUNTADAS': total_puntadas,
-            'FECHA_CALCULO': datetime.now().date(),
-            'HORA_CALCULO': datetime.now().strftime("%H:%M:%S")
-        })
+            # Calcular múltiplos
+            pasadas = np.ceil(piezas / cabezas)
+            multiplo = pasadas * cabezas
+            puntadas_ajustadas = max(puntadas_base, 4000)
+            puntadas_multiplos = multiplo * puntadas_ajustadas
+            
+            # ✅ CORREGIDO: Calcular cambios de color
+            # Primera orden del día: 36,000 (inicio turno) + 18,000 (primera orden) = 54,000
+            # Órdenes adicionales: 18,000 cada una
+            if idx == 0:  # Primera orden del día
+                puntadas_cambios = 36000 + 18000  # Inicio turno + primera orden
+            else:  # Órdenes adicionales
+                puntadas_cambios = 18000  # Solo cambio de color
+            
+            total_puntadas = puntadas_multiplos + puntadas_cambios
+            
+            resultados.append({
+                'OPERADOR': operador,
+                'FECHA': fecha,
+                'PEDIDO': fila.get('#DE PEDIDO', 'N/A'),
+                'TIPO_PRENDA': fila.get('TIPO DE PRENDA', 'N/A'),
+                'DISEÑO': fila.get('DISEÑO', 'N/A'),
+                'CANTIDAD': piezas,
+                'PUNTADAS_BASE': puntadas_base,
+                'CABEZAS': cabezas,
+                'PASADAS': pasadas,
+                'MULTIPLO': multiplo,
+                'PUNTADAS_MULTIPLOS': puntadas_multiplos,
+                'PUNTADAS_CAMBIOS': puntadas_cambios,
+                'TOTAL_PUNTADAS': total_puntadas,
+                'FECHA_CALCULO': datetime.now().date(),
+                'HORA_CALCULO': datetime.now().strftime("%H:%M:%S"),
+                'ORDEN_DEL_DIA': idx + 1  # Para debugging: ver el número de orden en el día
+            })
     
     return pd.DataFrame(resultados)
-
+    
 def mostrar_consultas_operadores(df_calculado):
     """Interfaz para que los operadores consulten sus puntadas calculadas"""
     
