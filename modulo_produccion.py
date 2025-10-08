@@ -313,7 +313,7 @@ def mostrar_analisis_pedidos(df):
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-# ✅ CORREGIDO: Función de tendencias temporales
+# ✅ CORREGIDO COMPLETAMENTE: Función de tendencias temporales
 def mostrar_tendencias_temporales(df, df_calculado=None):
     """Mostrar tendencias a lo largo del tiempo INCLUYENDO CÁLCULOS"""
     
@@ -324,9 +324,11 @@ def mostrar_tendencias_temporales(df, df_calculado=None):
     st.subheader("📈 Tendencias Temporales")
     
     try:
-        # Agrupar por fecha - CORREGIDO: usar nombre correcto de columna
+        # ✅ CORREGIDO: Crear columna de fecha correctamente
         df_temporal = df.copy()
         df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
+        
+        # Agrupar por fecha
         tendencias = df_temporal.groupby('Fecha').agg({
             '#DE PEDIDO': 'count',
             'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
@@ -337,12 +339,15 @@ def mostrar_tendencias_temporales(df, df_calculado=None):
         if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
             df_calc_temporal = df_calculado.copy()
             if 'FECHA' in df_calc_temporal.columns:
-                # Convertir FECHA a datetime si es string
+                # Asegurar que FECHA sea tipo fecha
                 if df_calc_temporal['FECHA'].dtype == 'object':
                     df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
                 
+                # Agrupar cálculos por fecha
                 tendencias_calc = df_calc_temporal.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
                 tendencias_calc.columns = ['Fecha', 'TOTAL_PUNTADAS']  # Renombrar para merge
+                
+                # Hacer merge con las tendencias principales
                 tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
         
         if len(tendencias) > 1:
@@ -384,6 +389,9 @@ def mostrar_tendencias_temporales(df, df_calculado=None):
             
     except Exception as e:
         st.error(f"Error al generar tendencias temporales: {str(e)}")
+        # Mostrar información de debug
+        st.info("Columnas disponibles en los datos:")
+        st.info(f"{list(df.columns)}")
 
 # ✅ NUEVAS FUNCIONES PARA CÁLCULOS AUTOMÁTICOS
 def guardar_calculos_en_sheets(df_calculado):
