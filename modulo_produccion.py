@@ -523,7 +523,7 @@ def calcular_puntadas_automaticamente(df):
     
     return pd.DataFrame(resultados)
     
-def mostrar_consultas_operadores(df_calculado):
+def mostrar_consultas_operadores(df_calculado, df_resumen):
     """Interfaz para que los operadores consulten sus puntadas calculadas"""
     
     if df_calculado is None or df_calculado.empty:
@@ -616,6 +616,7 @@ def mostrar_consultas_operadores(df_calculado):
                 file_name=f"puntadas_{operador_seleccionado}.csv",
                 mime="text/csv"
             )
+            mostrar_comisiones_operador(df_resumen, operador_seleccionado)
         else:
             st.warning("No hay datos para los filtros seleccionados")
 
@@ -664,27 +665,34 @@ def mostrar_dashboard_produccion():
             if not df_calculado.empty:
                 try:
                     guardar_calculos_en_sheets(df_calculado)
+                    # ✅ NUEVO: Guardar resumen ejecutivo automáticamente
+                    guardar_resumen_ejecutivo(df_calculado)
                 except Exception as e:
                     st.sidebar.warning(f"⚠️ No se pudieron guardar los cálculos: {e}")
             
-            return df, df_calculado
+            # ✅ NUEVO: Cargar resumen ejecutivo
+            df_resumen = cargar_resumen_ejecutivo()
+            
+            return df, df_calculado, df_resumen
         
         # Cargar y calcular datos automáticamente
-        df, df_calculado = cargar_y_calcular_datos()
+        df, df_calculado, df_resumen = cargar_y_calcular_datos()
         
         st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
         st.sidebar.info(f"📊 Registros: {len(df)}")
         if not df_calculado.empty:
             st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
+        if not df_resumen.empty:
+            st.sidebar.success(f"💰 Comisiones: {len(df_resumen)} registros")
         
         # ✅ MOSTRAR DASHBOARD
-        mostrar_interfaz_dashboard(df, df_calculado)
+        mostrar_interfaz_dashboard(df, df_calculado, df_resumen)
         
     except Exception as e:
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
 
-def mostrar_interfaz_dashboard(df, df_calculado=None):
+def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
     """Interfaz principal del dashboard"""
     
     st.title("🏭 Dashboard de Producción")
@@ -693,12 +701,14 @@ def mostrar_interfaz_dashboard(df, df_calculado=None):
     st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
     if df_calculado is not None and not df_calculado.empty:
         st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
+    if df_resumen is not None and not df_resumen.empty:
+        st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
     
     # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
     
     # ✅ PESTAÑAS PRINCIPALES
-    tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas"])
+    tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
     
     with tab1:
         # ✅ MÉTRICAS PRINCIPALES CON CÁLCULOS
@@ -724,9 +734,9 @@ def mostrar_interfaz_dashboard(df, df_calculado=None):
         st.dataframe(df_filtrado, use_container_width=True, height=400)
     
     with tab2:
-        # ✅ CONSULTA PARA OPERADORES (SOLO LECTURA)
-        st.info("🔍 **Consulta tus puntadas calculadas automáticamente**")
-        mostrar_consultas_operadores(df_calculado)
+        # ✅ ACTUALIZADO: Consulta para operadores INCLUYENDO COMISIONES
+        st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
+        mostrar_consultas_operadores(df_calculado, df_resumen)
 
 def crear_hoja_resumen_ejecutivo():
     """Crear la hoja de resumen ejecutivo si no existe"""
