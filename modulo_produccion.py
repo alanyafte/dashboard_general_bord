@@ -159,6 +159,7 @@ def mostrar_analisis_puntadas_calculadas(df_calculado):
     """Análisis específico de puntadas CALCULADAS"""
     
     if df_calculado is None or df_calculado.empty or "TOTAL_PUNTADAS" not in df_calculado.columns:
+        st.info("No hay cálculos de puntadas disponibles para mostrar.")
         return
     
     st.subheader("🪡 Análisis de Puntadas Calculadas")
@@ -179,13 +180,14 @@ def mostrar_analisis_puntadas_calculadas(df_calculado):
             puntadas_por_prenda = df_calculado.groupby("TIPO_PRENDA")["TOTAL_PUNTADAS"].sum().reset_index()
             puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas Calculadas']
             
-            fig = px.pie(
-                puntadas_por_prenda, 
-                values='Total Puntadas Calculadas', 
-                names='Tipo de Prenda',
-                title="Distribución de Puntadas Calculadas por Tipo de Prenda"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(puntadas_por_prenda) > 0:
+                fig = px.pie(
+                    puntadas_por_prenda, 
+                    values='Total Puntadas Calculadas', 
+                    names='Tipo de Prenda',
+                    title="Distribución de Puntadas Calculadas por Tipo de Prenda"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 def mostrar_analisis_operadores(df):
     """Análisis detallado por operador INCLUYENDO PUNTADAS"""
@@ -268,13 +270,14 @@ def mostrar_analisis_puntadas(df):
             puntadas_por_prenda = df.groupby("TIPO DE PRENDA")["PUNTADAS"].sum().reset_index()
             puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas']
             
-            fig = px.pie(
-                puntadas_por_prenda, 
-                values='Total Puntadas', 
-                names='Tipo de Prenda',
-                title="Distribución de Puntadas Base por Tipo de Prenda"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(puntadas_por_prenda) > 0:
+                fig = px.pie(
+                    puntadas_por_prenda, 
+                    values='Total Puntadas', 
+                    names='Tipo de Prenda',
+                    title="Distribución de Puntadas Base por Tipo de Prenda"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 def mostrar_analisis_pedidos(df):
     """Análisis de pedidos y producción"""
@@ -301,76 +304,86 @@ def mostrar_analisis_pedidos(df):
             tipos_prenda = df["TIPO DE PRENDA"].value_counts().reset_index()
             tipos_prenda.columns = ['Tipo de Prenda', 'Cantidad']
             
-            fig = px.pie(
-                tipos_prenda, 
-                values='Cantidad', 
-                names='Tipo de Prenda',
-                title="Distribución por Tipo de Prenda"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(tipos_prenda) > 0:
+                fig = px.pie(
+                    tipos_prenda, 
+                    values='Cantidad', 
+                    names='Tipo de Prenda',
+                    title="Distribución por Tipo de Prenda"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
+# ✅ CORREGIDO: Función de tendencias temporales
 def mostrar_tendencias_temporales(df, df_calculado=None):
     """Mostrar tendencias a lo largo del tiempo INCLUYENDO CÁLCULOS"""
     
     if df.empty or "Marca temporal" not in df.columns:
+        st.info("No hay datos temporales disponibles para mostrar tendencias.")
         return
     
     st.subheader("📈 Tendencias Temporales")
     
-    # Agrupar por fecha
-    df_temporal = df.copy()
-    df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
-    tendencias = df_temporal.groupby('Fecha').agg({
-        '#DE PEDIDO': 'count',
-        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
-        'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
-    }).reset_index()
-    
-    # ✅ AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
-    if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
-        df_calc_temporal = df_calculado.copy()
-        if 'FECHA' in df_calc_temporal.columns:
-            # Convertir FECHA a datetime si es string
-            if df_calc_temporal['FECHA'].dtype == 'object':
-                df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+    try:
+        # Agrupar por fecha - CORREGIDO: usar nombre correcto de columna
+        df_temporal = df.copy()
+        df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
+        tendencias = df_temporal.groupby('Fecha').agg({
+            '#DE PEDIDO': 'count',
+            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
+            'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
+        }).reset_index()
+        
+        # ✅ CORREGIDO: AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            df_calc_temporal = df_calculado.copy()
+            if 'FECHA' in df_calc_temporal.columns:
+                # Convertir FECHA a datetime si es string
+                if df_calc_temporal['FECHA'].dtype == 'object':
+                    df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+                
+                tendencias_calc = df_calc_temporal.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
+                tendencias_calc.columns = ['Fecha', 'TOTAL_PUNTADAS']  # Renombrar para merge
+                tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
+        
+        if len(tendencias) > 1:
+            # Gráfico de pedidos por día
+            fig = px.line(
+                tendencias, 
+                x='Fecha', 
+                y='#DE PEDIDO',
+                title="Evolución de Pedidos por Día",
+                markers=True
+            )
+            st.plotly_chart(fig, use_container_width=True)
             
-            tendencias_calc = df_calc_temporal.groupby('Fecha')['TOTAL_PUNTADAS'].sum().reset_index()
-            tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
-    
-    if len(tendencias) > 1:
-        # Gráfico de pedidos por día
-        fig = px.line(
-            tendencias, 
-            x='Fecha', 
-            y='#DE PEDIDO',
-            title="Evolución de Pedidos por Día",
-            markers=True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Gráfico de puntadas por día (si existen)
-        if "PUNTADAS" in df.columns:
-            fig2 = px.line(
-                tendencias, 
-                x='Fecha', 
-                y='PUNTADAS',
-                title="Evolución de Puntadas Base por Día",
-                markers=True,
-                color_discrete_sequence=['red']
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        # ✅ NUEVO GRÁFICO: Puntadas calculadas por día
-        if "TOTAL_PUNTADAS" in tendencias.columns:
-            fig3 = px.line(
-                tendencias, 
-                x='Fecha', 
-                y='TOTAL_PUNTADAS',
-                title="Evolución de Puntadas Calculadas por Día",
-                markers=True,
-                color_discrete_sequence=['green']
-            )
-            st.plotly_chart(fig3, use_container_width=True)
+            # Gráfico de puntadas por día (si existen)
+            if "PUNTADAS" in df.columns:
+                fig2 = px.line(
+                    tendencias, 
+                    x='Fecha', 
+                    y='PUNTADAS',
+                    title="Evolución de Puntadas Base por Día",
+                    markers=True,
+                    color_discrete_sequence=['red']
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            # ✅ NUEVO GRÁFICO: Puntadas calculadas por día
+            if "TOTAL_PUNTADAS" in tendencias.columns and not tendencias["TOTAL_PUNTADAS"].isna().all():
+                fig3 = px.line(
+                    tendencias, 
+                    x='Fecha', 
+                    y='TOTAL_PUNTADAS',
+                    title="Evolución de Puntadas Calculadas por Día",
+                    markers=True,
+                    color_discrete_sequence=['green']
+                )
+                st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.info("Se necesitan datos de más de un día para mostrar tendencias.")
+            
+    except Exception as e:
+        st.error(f"Error al generar tendencias temporales: {str(e)}")
 
 # ✅ NUEVAS FUNCIONES PARA CÁLCULOS AUTOMÁTICOS
 def guardar_calculos_en_sheets(df_calculado):
