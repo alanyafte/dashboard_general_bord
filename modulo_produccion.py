@@ -788,14 +788,17 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
         st.info("No hay operadores con cálculos disponibles.")
         return
         
+    # ✅ SOLUCIÓN CORRECTA: Agregar opción vacía al inicio
     operador_seleccionado = st.selectbox(
         "Selecciona tu operador:", 
-        operadores,
-        index=0  # Esto hará que no haya selección automática
+        [""] + operadores,  # ✅ Opción vacía primero
+        index=0  # ✅ Esto selecciona la opción vacía
     )
     
+    # ✅ Verificar si se ha seleccionado un operador válido
     if not operador_seleccionado:
-        st.info("👆 Por favor, selecciona un operador para ver sus puntadas y comisiones")
+        st.info("👆 **Por favor, selecciona tu nombre de la lista para ver tus puntadas y comisiones**")
+        st.warning("💡 _Si no encuentras tu nombre, verifica que hayas registrado producción hoy_")
         return
     
     if operador_seleccionado:
