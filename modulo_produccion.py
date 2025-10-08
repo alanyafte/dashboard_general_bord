@@ -61,12 +61,13 @@ def aplicar_filtros(df):
         if operadores_seleccionados:
             df_filtrado = df_filtrado[df_filtrado["OPERADOR"].isin(operadores_seleccionados)]
     
-    # Filtro por fecha (Marca temporal)
+    # ✅ CORREGIDO: Filtro por fecha (Marca temporal)
     if "Marca temporal" in df.columns and not df_filtrado["Marca temporal"].isna().all():
         fechas_disponibles = df_filtrado["Marca temporal"].dropna()
         if not fechas_disponibles.empty:
-            fecha_min = fechas_disponibles.min().date()
-            fecha_max = fechas_disponibles.max().date()
+            # Convertir a fecha sin hora para el date_input
+            fecha_min = fechas_disponibles.min().to_pydatetime().date()
+            fecha_max = fechas_disponibles.max().to_pydatetime().date()
             
             rango_fechas = st.sidebar.date_input(
                 "Rango de Fechas:",
@@ -74,9 +75,16 @@ def aplicar_filtros(df):
                 min_value=fecha_min,
                 max_value=fecha_max
             )
+            
+            # ✅ CORREGIDO: Verificar que se seleccionaron 2 fechas
             if len(rango_fechas) == 2:
-                mask = (df_filtrado["Marca temporal"].dt.date >= rango_fechas[0]) & \
-                       (df_filtrado["Marca temporal"].dt.date <= rango_fechas[1])
+                fecha_inicio, fecha_fin = rango_fechas
+                # Convertir a datetime para comparación
+                fecha_inicio_dt = pd.to_datetime(fecha_inicio)
+                fecha_fin_dt = pd.to_datetime(fecha_fin) + timedelta(days=1)  # Incluir todo el día final
+                
+                mask = (df_filtrado["Marca temporal"] >= fecha_inicio_dt) & \
+                       (df_filtrado["Marca temporal"] < fecha_fin_dt)
                 df_filtrado = df_filtrado[mask]
     
     # Filtro por TIPO DE PRENDA
@@ -105,8 +113,9 @@ def aplicar_filtros(df):
     
     return df_filtrado
 
-def mostrar_metricas_principales(df):
-    """Mostrar métricas principales de producción"""
+# ✅ NUEVA FUNCIÓN: Métricas con cálculos automáticos
+def mostrar_metricas_principales(df, df_calculado=None):
+    """Mostrar métricas principales de producción INCLUYENDO CÁLCULOS AUTOMÁTICOS"""
     
     if df.empty:
         st.warning("No hay datos con los filtros aplicados")
@@ -135,15 +144,48 @@ def mostrar_metricas_principales(df):
             st.metric("Diseños Únicos", df["DISEÑO"].nunique())
     
     with col4:
-        # ✅ NUEVA MÉTRICA: SUMA TOTAL DE PUNTADAS
-        if "PUNTADAS" in df.columns:
+        # ✅ MÉTRICA MEJORADA: Usar cálculos automáticos si están disponibles
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
+            st.metric("Total Puntadas Calculadas", f"{total_puntadas_calculadas:,.0f}")
+        elif "PUNTADAS" in df.columns:
             total_puntadas = df["PUNTADAS"].sum()
-            st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
-        elif "Marca temporal" in df.columns and not df["Marca temporal"].isna().all():
-            ultima_actualizacion = df["Marca temporal"].max()
-            st.metric("Último Registro", ultima_actualizacion.strftime("%d/%m/%Y"))
+            st.metric("Total Puntadas Base", f"{total_puntadas:,.0f}")
         else:
             st.metric("Pedidos Únicos", df["#DE PEDIDO"].nunique())
+
+# ✅ NUEVA FUNCIÓN: Análisis con cálculos automáticos
+def mostrar_analisis_puntadas_calculadas(df_calculado):
+    """Análisis específico de puntadas CALCULADAS"""
+    
+    if df_calculado is None or df_calculado.empty or "TOTAL_PUNTADAS" not in df_calculado.columns:
+        return
+    
+    st.subheader("🪡 Análisis de Puntadas Calculadas")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Top operadores por puntadas calculadas
+        puntadas_por_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).reset_index()
+        puntadas_por_operador.columns = ['Operador', 'Total Puntadas Calculadas']
+        
+        st.write("**🏆 Ranking por Puntadas Calculadas:**")
+        st.dataframe(puntadas_por_operador, use_container_width=True)
+    
+    with col2:
+        # Distribución de puntadas calculadas por tipo de prenda
+        if "TIPO_PRENDA" in df_calculado.columns:
+            puntadas_por_prenda = df_calculado.groupby("TIPO_PRENDA")["TOTAL_PUNTADAS"].sum().reset_index()
+            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas Calculadas']
+            
+            fig = px.pie(
+                puntadas_por_prenda, 
+                values='Total Puntadas Calculadas', 
+                names='Tipo de Prenda',
+                title="Distribución de Puntadas Calculadas por Tipo de Prenda"
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 def mostrar_analisis_operadores(df):
     """Análisis detallado por operador INCLUYENDO PUNTADAS"""
@@ -208,7 +250,7 @@ def mostrar_analisis_puntadas(df):
     if df.empty or "PUNTADAS" not in df.columns:
         return
     
-    st.subheader("🪡 Análisis de Puntadas")
+    st.subheader("🪡 Análisis de Puntadas Base")
     
     col1, col2 = st.columns(2)
     
@@ -217,7 +259,7 @@ def mostrar_analisis_puntadas(df):
         puntadas_por_operador = df.groupby("OPERADOR")["PUNTADAS"].sum().sort_values(ascending=False).reset_index()
         puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
         
-        st.write("**🏆 Ranking por Puntadas:**")
+        st.write("**🏆 Ranking por Puntadas Base:**")
         st.dataframe(puntadas_por_operador, use_container_width=True)
     
     with col2:
@@ -230,7 +272,7 @@ def mostrar_analisis_puntadas(df):
                 puntadas_por_prenda, 
                 values='Total Puntadas', 
                 names='Tipo de Prenda',
-                title="Distribución de Puntadas por Tipo de Prenda"
+                title="Distribución de Puntadas Base por Tipo de Prenda"
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -267,8 +309,8 @@ def mostrar_analisis_pedidos(df):
             )
             st.plotly_chart(fig, use_container_width=True)
 
-def mostrar_tendencias_temporales(df):
-    """Mostrar tendencias a lo largo del tiempo"""
+def mostrar_tendencias_temporales(df, df_calculado=None):
+    """Mostrar tendencias a lo largo del tiempo INCLUYENDO CÁLCULOS"""
     
     if df.empty or "Marca temporal" not in df.columns:
         return
@@ -283,6 +325,17 @@ def mostrar_tendencias_temporales(df):
         'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
         'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
     }).reset_index()
+    
+    # ✅ AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
+    if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+        df_calc_temporal = df_calculado.copy()
+        if 'FECHA' in df_calc_temporal.columns:
+            # Convertir FECHA a datetime si es string
+            if df_calc_temporal['FECHA'].dtype == 'object':
+                df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+            
+            tendencias_calc = df_calc_temporal.groupby('Fecha')['TOTAL_PUNTADAS'].sum().reset_index()
+            tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
     
     if len(tendencias) > 1:
         # Gráfico de pedidos por día
@@ -301,11 +354,23 @@ def mostrar_tendencias_temporales(df):
                 tendencias, 
                 x='Fecha', 
                 y='PUNTADAS',
-                title="Evolución de Puntadas por Día",
+                title="Evolución de Puntadas Base por Día",
                 markers=True,
                 color_discrete_sequence=['red']
             )
             st.plotly_chart(fig2, use_container_width=True)
+        
+        # ✅ NUEVO GRÁFICO: Puntadas calculadas por día
+        if "TOTAL_PUNTADAS" in tendencias.columns:
+            fig3 = px.line(
+                tendencias, 
+                x='Fecha', 
+                y='TOTAL_PUNTADAS',
+                title="Evolución de Puntadas Calculadas por Día",
+                markers=True,
+                color_discrete_sequence=['green']
+            )
+            st.plotly_chart(fig3, use_container_width=True)
 
 # ✅ NUEVAS FUNCIONES PARA CÁLCULOS AUTOMÁTICOS
 def guardar_calculos_en_sheets(df_calculado):
@@ -336,7 +401,7 @@ def guardar_calculos_en_sheets(df_calculado):
         except:
             worksheet = spreadsheet.add_worksheet(title="puntadas_calculadas", rows="1000", cols="20")
         
-        # Limpiar la hoja existente y escribir nuevos datos
+        # Limpiar la hoja existente
         worksheet.clear()
         
         # ✅ CONVERTIR FECHAS A STRING ANTES DE GUARDAR
@@ -440,8 +505,13 @@ def mostrar_consultas_operadores(df_calculado):
     
     st.header("👤 Consulta de Puntadas por Operador")
     
+    # ✅ CORREGIDO: Convertir FECHA de string a date si es necesario
+    df_consulta = df_calculado.copy()
+    if 'FECHA' in df_consulta.columns and df_consulta['FECHA'].dtype == 'object':
+        df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA']).dt.date
+    
     # Selección de operador
-    operadores = sorted(df_calculado["OPERADOR"].unique())
+    operadores = sorted(df_consulta["OPERADOR"].unique())
     
     if not operadores:
         st.info("No hay operadores con cálculos disponibles.")
@@ -451,12 +521,12 @@ def mostrar_consultas_operadores(df_calculado):
     
     if operador_seleccionado:
         # Filtrar datos del operador
-        df_operador = df_calculado[df_calculado["OPERADOR"] == operador_seleccionado].copy()
+        df_operador = df_consulta[df_consulta["OPERADOR"] == operador_seleccionado].copy()
         
         # Filtros adicionales
         col1, col2 = st.columns(2)
         with col1:
-            fechas = sorted(df_operador["FECHA"].unique())
+            fechas = sorted(df_operador["FECHA"].unique()) if 'FECHA' in df_operador.columns else []
             fecha_seleccionada = st.selectbox("Filtrar por fecha:", ["Todas"] + fechas)
         with col2:
             pedidos = sorted(df_operador["PEDIDO"].unique())
@@ -484,7 +554,7 @@ def mostrar_consultas_operadores(df_calculado):
             with col3:
                 st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
             
-             # Gráfico de puntadas por fecha
+            # Gráfico de puntadas por fecha
             if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
                 st.subheader("📈 Evolución de Puntadas")
                 puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
@@ -498,15 +568,13 @@ def mostrar_consultas_operadores(df_calculado):
                 )
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Detalle de pedidos
+            # ✅ CORREGIDO: Detalle de pedidos (SIN DUPLICAR)
             st.subheader("📋 Detalle de Pedidos")
             columnas_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
                                'PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']
             columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
             
-            st.dataframe(df_operador[columnas_disponibles], use_container_width=True)
-
-            # ✅ CONVERTIR FECHAS A STRING PARA MOSTRAR MEJOR
+            # ✅ SOLO UN dataframe, no dos
             df_mostrar = df_operador[columnas_disponibles].copy()
             if 'FECHA' in df_mostrar.columns:
                 df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
@@ -514,7 +582,7 @@ def mostrar_consultas_operadores(df_calculado):
             st.dataframe(df_mostrar, use_container_width=True)
             
             # Opción para descargar
-            csv = df_operador[columnas_disponibles].to_csv(index=False)
+            csv = df_mostrar.to_csv(index=False)
             st.download_button(
                 label="📥 Descargar Mis Puntadas",
                 data=csv,
@@ -606,20 +674,23 @@ def mostrar_interfaz_dashboard(df, df_calculado=None):
     tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas"])
     
     with tab1:
-        # ✅ MÉTRICAS PRINCIPALES
-        mostrar_metricas_principales(df_filtrado)
+        # ✅ MÉTRICAS PRINCIPALES CON CÁLCULOS
+        mostrar_metricas_principales(df_filtrado, df_calculado)
+        
+        # ✅ ANÁLISIS DE PUNTADAS CALCULADAS
+        mostrar_analisis_puntadas_calculadas(df_calculado)
         
         # ✅ ANÁLISIS POR OPERADOR
         mostrar_analisis_operadores(df_filtrado)
         
-        # ✅ ANÁLISIS ESPECÍFICO DE PUNTADAS
+        # ✅ ANÁLISIS ESPECÍFICO DE PUNTADAS BASE
         mostrar_analisis_puntadas(df_filtrado)
         
         # ✅ ANÁLISIS DE PEDIDOS
         mostrar_analisis_pedidos(df_filtrado)
         
-        # ✅ TENDENCIAS TEMPORALES
-        mostrar_tendencias_temporales(df_filtrado)
+        # ✅ TENDENCIAS TEMPORALES CON CÁLCULOS
+        mostrar_tendencias_temporales(df_filtrado, df_calculado)
         
         # ✅ DATOS DETALLADOS
         st.subheader("📋 Datos Detallados de Producción")
