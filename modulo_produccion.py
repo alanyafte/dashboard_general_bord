@@ -788,7 +788,15 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
         st.info("No hay operadores con cálculos disponibles.")
         return
         
-    operador_seleccionado = st.selectbox("Selecciona tu operador:", operadores)
+    operador_seleccionado = st.selectbox(
+        "Selecciona tu operador:", 
+        operadores,
+        index=0  # Esto hará que no haya selección automática
+    )
+    
+    if not operador_seleccionado:
+        st.info("👆 Por favor, selecciona un operador para ver sus puntadas y comisiones")
+        return
     
     if operador_seleccionado:
         # Filtrar datos del operador
