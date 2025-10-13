@@ -1,4 +1,5 @@
 import streamlit as st
+import hashlib
 from modulo_clima_laboral import mostrar_dashboard_clima_laboral
 from modulo_produccion import mostrar_dashboard_produccion
 from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion
