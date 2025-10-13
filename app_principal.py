@@ -53,7 +53,7 @@ if not st.session_state[modulo_acceso_key]:
         )
         
         if st.button("🔑 Verificar Acceso", use_container_width=True):
-            if contraseña == HASHES_MODULOS[modulo_seleccionado]:
+            if verificar_contraseña(contraseña, HASHES_MODULOS[modulo_seleccionado]):
                 st.session_state[modulo_acceso_key] = True
                 st.rerun()
             else:
