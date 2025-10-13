@@ -451,7 +451,7 @@ def calcular_puntadas_automaticamente(df):
     # CONFIGURACIÓN FIJA DE MÁQUINAS (puedes ajustar estos valores)
     CONFIG_MAQUINAS = {
         "Susi": 6,
-        "Juanito": 6,
+        "Juan": 6,
         "Esmeralda": 6,
         "Rigoberto": 6,
         "Maricela": 2,
