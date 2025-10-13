@@ -9,12 +9,11 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
-
-# Contraseñas por módulo (puedes cambiarlas fácilmente)
+# Contraseñas desde secrets de Streamlit
 CONTRASEÑAS_MODULOS = {
-    "🏭 Producción": "produccion123",
-    "👥 Clima Laboral": "clima456", 
-    "😊 Satisfacción Cliente": "cliente789",
+    "🏭 Producción": st.secrets["PASSWORD_PRODUCCION"],
+    "👥 Clima Laboral": st.secrets["PASSWORD_CLIMA_LABORAL"], 
+    "😊 Satisfacción Cliente": st.secrets["PASSWORD_SATISFACCION_CLIENTE"],
 }
 
 # Inicializar estado de sesión para cada módulo
