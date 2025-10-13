@@ -9,12 +9,22 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
-# Contraseñas desde secrets de Streamlit
-CONTRASEÑAS_MODULOS = {
-    "🏭 Producción": st.secrets["PASSWORD_PRODUCCION"],
-    "👥 Clima Laboral": st.secrets["PASSWORD_CLIMA_LABORAL"], 
-    "😊 Satisfacción Cliente": st.secrets["PASSWORD_SATISFACCION_CLIENTE"],
-}
+# Cargar contraseñas desde Streamlit Secrets
+def cargar_contraseñas_seguras():
+    try:
+        # Intentar cargar desde secrets
+        contraseñas = {
+            "🏭 Producción": st.secrets["PASSWORD_PRODUCCION"],
+            "👥 Clima Laboral": st.secrets["PASSWORD_CLIMA_LABORAL"], 
+            "😊 Satisfacción Cliente": st.secrets["PASSWORD_SATISFACCION_CLIENTE"],
+        }
+        st.sidebar.success("🔐 Secrets cargados correctamente")
+        return contraseñas
+    except Exception as e:
+        st.error(f"❌ Error cargando secrets: {e}")
+        st.stop()  # Detener la app si no hay secrets
+
+CONTRASEÑAS_MODULOS = cargar_contraseñas_seguras()
 
 # Inicializar estado de sesión para cada módulo
 for modulo in CONTRASEÑAS_MODULOS.keys():
