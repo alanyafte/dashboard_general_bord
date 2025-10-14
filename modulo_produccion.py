@@ -766,7 +766,6 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         mime="text/csv"
     )
 
-# ✅ MODIFICAR la función mostrar_consultas_operadores para incluir comisiones
 def mostrar_consultas_operadores(df_calculado, df_resumen):
     """Interfaz para que los operadores consulten sus puntadas calculadas Y comisiones"""
     
@@ -776,10 +775,21 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
     
     st.header("👤 Consulta de Puntadas y Comisiones por Operador")
     
-    # ✅ CORREGIDO: Convertir FECHA de string a date si es necesario
+    # ✅ CORREGIDO: Mejorar la conversión de fechas
     df_consulta = df_calculado.copy()
-    if 'FECHA' in df_consulta.columns and df_consulta['FECHA'].dtype == 'object':
-        df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA']).dt.date
+    
+    # Asegurar que la columna FECHA esté en formato fecha correctamente
+    if 'FECHA' in df_consulta.columns:
+        if df_consulta['FECHA'].dtype == 'object':
+            # Intentar diferentes formatos de fecha
+            try:
+                df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], errors='coerce').dt.date
+            except:
+                # Si falla, intentar parsear manualmente
+                try:
+                    df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], format='%Y-%m-%d', errors='coerce').dt.date
+                except:
+                    st.warning("⚠️ No se pudieron procesar algunas fechas correctamente")
     
     # Selección de operador
     operadores = sorted(df_consulta["OPERADOR"].unique())
@@ -805,20 +815,56 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
         # Filtrar datos del operador
         df_operador = df_consulta[df_consulta["OPERADOR"] == operador_seleccionado].copy()
         
-        # Filtros adicionales
-        col1, col2 = st.columns(2)
-        with col1:
-            fechas = sorted(df_operador["FECHA"].unique()) if 'FECHA' in df_operador.columns else []
-            fecha_seleccionada = st.selectbox("Filtrar por fecha:", ["Todas"] + fechas)
-        with col2:
-            pedidos = sorted(df_operador["PEDIDO"].unique())
-            pedido_seleccionado = st.selectbox("Filtrar por pedido:", ["Todos"] + pedidos)
+        # ✅ CORREGIDO: Mejorar el filtro de fechas
+        if 'FECHA' in df_operador.columns and not df_operador.empty:
+            # Asegurar que las fechas estén limpias
+            df_operador = df_operador.dropna(subset=['FECHA'])
+            
+            # Obtener todas las fechas únicas y ordenarlas (más reciente primero)
+            fechas_disponibles = sorted(df_operador["FECHA"].unique(), reverse=True)
+            
+            # Formatear fechas para mostrar en el selectbox
+            fechas_formateadas = ["Todas"] + [fecha.strftime('%Y-%m-%d') for fecha in fechas_disponibles]
+            
+            st.write(f"**📅 Fechas disponibles:** {len(fechas_disponibles)} días de registro")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                fecha_seleccionada_str = st.selectbox(
+                    "Filtrar por fecha:", 
+                    fechas_formateadas,
+                    help="Selecciona 'Todas' para ver todo el historial"
+                )
+            
+            # Aplicar filtro de fecha si no es "Todas"
+            if fecha_seleccionada_str != "Todas":
+                # Convertir la cadena seleccionada de vuelta a fecha
+                fecha_seleccionada = pd.to_datetime(fecha_seleccionada_str).date()
+                df_operador = df_operador[df_operador["FECHA"] == fecha_seleccionada]
+                st.info(f"📊 Mostrando datos del: **{fecha_seleccionada_str}**")
+            else:
+                st.info("📊 Mostrando **todo el historial** disponible")
         
-        # Aplicar filtros
-        if fecha_seleccionada != "Todas" and 'FECHA' in df_operador.columns:
-            df_operador = df_operador[df_operador["FECHA"] == fecha_seleccionada]
-        if pedido_seleccionado != "Todos":
-            df_operador = df_operador[df_operador["PEDIDO"] == pedido_seleccionado]
+        with col2:
+            # Filtro por pedido (solo si hay datos)
+            if not df_operador.empty and 'PEDIDO' in df_operador.columns:
+                pedidos = sorted(df_operador["PEDIDO"].unique())
+                pedido_seleccionado = st.selectbox("Filtrar por pedido:", ["Todos"] + pedidos)
+                
+                if pedido_seleccionado != "Todos":
+                    df_operador = df_operador[df_operador["PEDIDO"] == pedido_seleccionado]
+        
+        # ✅ DEBUG: Mostrar información sobre los datos filtrados
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔍 Información de Datos")
+        if 'FECHA' in df_operador.columns:
+            st.sidebar.write(f"**Rango de fechas en datos:**")
+            if not df_operador.empty:
+                fecha_min = df_operador['FECHA'].min()
+                fecha_max = df_operador['FECHA'].max()
+                st.sidebar.write(f"• Más antiguo: {fecha_min}")
+                st.sidebar.write(f"• Más reciente: {fecha_max}")
+                st.sidebar.write(f"• Total días: {df_operador['FECHA'].nunique()}")
             
         # Mostrar métricas del operador
         st.subheader(f"📊 Resumen de {operador_seleccionado}")
@@ -836,10 +882,11 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
             with col3:
                 st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
             
-            # Gráfico de puntadas por fecha
+            # Gráfico de puntadas por fecha (solo si hay múltiples fechas)
             if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
                 st.subheader("📈 Evolución de Puntadas")
                 puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
+                puntadas_por_fecha = puntadas_por_fecha.sort_values("FECHA")
                 
                 fig = px.line(
                     puntadas_por_fecha,
@@ -848,6 +895,8 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                     title=f"Puntadas de {operador_seleccionado} por Fecha",
                     markers=True
                 )
+                fig.update_xaxes(title_text="Fecha")
+                fig.update_yaxes(title_text="Total Puntadas")
                 st.plotly_chart(fig, use_container_width=True)
             
             # Detalle de pedidos
@@ -856,15 +905,24 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                                'PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']
             columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
             
-            # ✅ SOLO UN dataframe, no dos
             df_mostrar = df_operador[columnas_disponibles].copy()
+            
+            # Formatear la columna FECHA para mostrar
             if 'FECHA' in df_mostrar.columns:
                 df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
+            
+            # Formatear números grandes con separadores de miles
+            for col in ['PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']:
+                if col in df_mostrar.columns:
+                    df_mostrar[col] = df_mostrar[col].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
+            
+            if 'CANTIDAD' in df_mostrar.columns:
+                df_mostrar['CANTIDAD'] = df_mostrar['CANTIDAD'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
             
             st.dataframe(df_mostrar, use_container_width=True)
             
             # Opción para descargar puntadas
-            csv = df_mostrar.to_csv(index=False)
+            csv = df_operador[columnas_disponibles].to_csv(index=False)
             st.download_button(
                 label="📥 Descargar Mis Puntadas",
                 data=csv,
@@ -872,7 +930,7 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                 mime="text/csv"
             )
             
-            # ✅ NUEVO: Mostrar comisiones del operador
+            # ✅ Mostrar comisiones del operador
             mostrar_comisiones_operador(df_resumen, operador_seleccionado)
             
         else:
