@@ -521,7 +521,17 @@ def mostrar_comisiones_operador(operador):
     """Muestra comisiones que el encargado ingresó en Sheets"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        service_account_info = {...}  # Tus credenciales
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
         
         creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
         gc = gspread.authorize(creds)
@@ -569,7 +579,17 @@ def vista_admin_encargado():
     
     # Cargar resumen ejecutivo
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    service_account_info = {...}  # Tus credenciales
+    
+    service_account_info = {
+        "type": st.secrets["gservice_account"]["type"],
+        "project_id": st.secrets["gservice_account"]["project_id"],
+        "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+        "private_key": st.secrets["gservice_account"]["private_key"],
+        "client_email": st.secrets["gservice_account"]["client_email"],
+        "client_id": st.secrets["gservice_account"]["client_id"],
+        "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+        "token_uri": st.secrets["gservice_account"]["token_uri"]
+    }
     
     creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
     gc = gspread.authorize(creds)
