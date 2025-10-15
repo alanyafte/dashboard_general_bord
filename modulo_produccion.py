@@ -448,7 +448,7 @@ def mostrar_resumen_periodo_actual(df_calculado, operador):
     # Detalle por día
     st.write("**Detalle por Día:**")
     resumen_diario = df_operador.groupby('FECHA').agg({
-        '#DE PEDIDO': 'count',
+        'PEDIDO': 'count',
         'CANTIDAD': 'sum',
         'TOTAL_PUNTADAS': 'sum'
     }).reset_index()
