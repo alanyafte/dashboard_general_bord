@@ -600,56 +600,34 @@ def main():
         return
     
     # Sidebar
-
-     st.sidebar.title("👤 Mi Consulta")
+    st.sidebar.title("👤 Mi Consulta")
     operadores = sorted(df['OPERADOR'].unique())
     es_admin = st.sidebar.checkbox("Soy encargado de operación")
 
-st.sidebar.title("👤 Mi Consulta")
-operadores = sorted(df['OPERADOR'].unique())
-es_admin = st.sidebar.checkbox("Soy encargado de operación")
-
-if es_admin:
-    vista_admin_encargado()
-else:
-    # Interfaz de operador normal
-    operador_seleccionado = st.sidebar.selectbox(
-        "Selecciona tu nombre:",
-        ["-- Selecciona --"] + operadores,
-        key="operador_select"
-    )
-    
-    if operador_seleccionado == "-- Selecciona --":
-        st.info("👆 Por favor selecciona tu nombre para ver tus datos.")
-        # NO usar return aquí, solo mostrar el mensaje y dejar que continúe
+    if es_admin:
+        vista_admin_encargado()
     else:
-        # Aquí pones TODO el código para mostrar los datos del operador
-        mostrar_datos_operador(operador_seleccionado)
-    
-    st.sidebar.title("👤 Mi Consulta")
-    operadores = sorted(df['OPERADOR'].unique())
-    
-    operador_seleccionado = st.sidebar.selectbox(
-        "Selecciona tu nombre:",
-        ["-- Selecciona --"] + operadores,
-        key="operador_select"
-    )
-    
-    if operador_seleccionado == "-- Selecciona --":
-        st.info("👆 Por favor selecciona tu nombre para ver tus datos.")
-        return
-    
-    # Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Período Actual", "📅 Histórico", "💰 Comisiones"])
+        # Interfaz de operador normal
+        operador_seleccionado = st.sidebar.selectbox(
+            "Selecciona tu nombre:",
+            ["-- Selecciona --"] + operadores,
+            key="operador_select"
+        )
+        
+        if operador_seleccionado == "-- Selecciona --":
+            st.info("👆 Por favor selecciona tu nombre para ver tus datos.")
+        else:
+            # Tabs
+            tab1, tab2, tab3 = st.tabs(["📊 Período Actual", "📅 Histórico", "💰 Comisiones"])
 
-with tab1:
-    mostrar_resumen_periodo_actual(df_calculado, operador_seleccionado)
+            with tab1:
+                mostrar_resumen_periodo_actual(df_calculado, operador_seleccionado)
 
-with tab2:
-    mostrar_historico_periodos(df_calculado, operador_seleccionado)
+            with tab2:
+                mostrar_historico_periodos(df_calculado, operador_seleccionado)
 
-with tab3:
-    mostrar_comisiones_operador(operador_seleccionado)
+            with tab3:
+                mostrar_comisiones_operador(operador_seleccionado)
     
     # Footer
     st.sidebar.markdown("---")
