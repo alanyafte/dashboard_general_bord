@@ -567,9 +567,9 @@ def cargar_datos_desde_sheets():
         st.error(f"❌ Error cargando datos: {str(e)}")
         return pd.DataFrame(), pd.DataFrame()
 
-# ==================== INTERFAZ PRINCIPAL ====================
+# ==================== FUNCIÓN PRINCIPAL ====================
 
-def mostrar_dashboard_mejorado():
+def mostrar_dashboard_produccion():
     """Función principal del dashboard mejorado"""
     
     st.title("🏭 Dashboard de Producción Mejorado")
@@ -640,17 +640,9 @@ def mostrar_dashboard_mejorado():
     if df_calculado is not None and not df_calculado.empty:
         st.sidebar.write(f"🧵 Total cálculos: {len(df_calculado)}")
 
-# ==================== FUNCIÓN DE COMPATIBILIDAD ====================
-
-def mostrar_dashboard_produccion():
-    """Función de compatibilidad para app_principal.py"""
-    return mostrar_dashboard_mejorado()
-
-# ==================== FUNCIÓN PRINCIPAL ====================
-
 def main():
     """Función principal"""
-    mostrar_dashboard_mejorado()
+    mostrar_dashboard_produccion()
 
 if __name__ == "__main__":
     main()
