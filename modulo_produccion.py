@@ -586,6 +586,59 @@ def vista_admin_encargado():
     st.info("📝 Para editar comisiones, dirígete a la hoja 'resumen_ejecutivo' en Google Sheets")
     st.link_button("Abrir Google Sheets", f"https://docs.google.com/spreadsheets/d/{st.secrets['gsheets']['produccion_sheet_id']}")
 
+# ==================== DASHBOARD PRINCIPAL ====================
+
+def mostrar_dashboard_produccion():
+    """
+    Función principal del dashboard de producción.
+    Punto de entrada para app_principal.py
+    """
+    st.set_page_config(page_title="Dashboard Producción", layout="wide")
+    st.title("🏭 Dashboard de Producción - Puntadas y Comisiones")
+    
+    # Cargar datos
+    df, df_calculado = cargar_datos_de_sheets()
+    
+    if df.empty:
+        st.error("No se pudieron cargar los datos.")
+        return
+    
+    # Sidebar
+    st.sidebar.title("👤 Mi Consulta")
+    operadores = sorted(df['OPERADOR'].unique())
+    es_admin = st.sidebar.checkbox("Soy encargado de operación")
+
+    if es_admin:
+        vista_admin_encargado()
+    else:
+        # Interfaz de operador normal
+        operador_seleccionado = st.sidebar.selectbox(
+            "Selecciona tu nombre:",
+            ["-- Selecciona --"] + operadores,
+            key="operador_select"
+        )
+        
+        if operador_seleccionado == "-- Selecciona --":
+            st.info("👆 Por favor selecciona tu nombre para ver tus datos.")
+        else:
+            # Tabs
+            tab1, tab2, tab3 = st.tabs(["📊 Período Actual", "📅 Histórico", "💰 Comisiones"])
+
+            with tab1:
+                mostrar_resumen_periodo_actual(df_calculado, operador_seleccionado)
+
+            with tab2:
+                mostrar_historico_periodos(df_calculado, operador_seleccionado)
+
+            with tab3:
+                mostrar_comisiones_operador(operador_seleccionado)
+    
+    # Footer
+    st.sidebar.markdown("---")
+    st.sidebar.write(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
+    st.sidebar.write(f"Total registros: {len(df)}")
+    st.sidebar.write(f"Total cálculos: {len(df_calculado)}")
+
 # ==================== MAIN ====================
 
 def main():
