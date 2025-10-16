@@ -25,7 +25,7 @@ def limpiar_dataframe(df_raw):
     
     # Convertir Marca temporal a datetime
     if "Marca temporal" in df.columns:
-        df["Marca temporal"] = pd.to_datetime(df["Marca temporal"], errors='coerce')
+        df["Marca temporal"] = pd.to_datetime(df["Marca temporal"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
     
     # Convertir CANTIDAD a numérico
     if "CANTIDAD" in df.columns:
