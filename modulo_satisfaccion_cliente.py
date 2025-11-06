@@ -13,7 +13,7 @@ def mostrar_dashboard_satisfaccion():
     st.caption("Datos actualizados desde Google Sheets - Costumatic & Bordamatic")
     
     try:
-        # ✅ AUTENTICACIÓN (MISMA QUE CLIMA LABORAL)
+        # ✅ AUTENTICACIÓN
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
         service_account_info = {
@@ -45,28 +45,61 @@ def mostrar_dashboard_satisfaccion():
         costumatic_df['Marca'] = 'Costumatic'
         bordamatic_df['Marca'] = 'Bordamatic'
         
-        # Renombrar columnas para unificación
+        # 🔴 RENOMBRADO DIFERENCIADO POR MARCA
         costumatic_df = costumatic_df.rename(columns={
-            '¿Cómo calificarías nuestra atención al cliente?': 'Atencion_Cliente',
-            '¿Qué tan satisfecho está con los productos y servicios que ofrece Costumatic?': 'Satisfaccion_General',
-            '¿Nos recomendarías?': 'Recomendacion',
-            '¿Tienes algún comentario o sugerencia?': 'Comentarios'
+            '¿Cómo calificarías nuestra atención al cliente?(1 al 5)': 'Atencion_Cliente',
+            '¿Qué tan satisfecho está con los productos y servicios que ofrece Costumatic?(1 al 5)': 'Satisfaccion_General',
+            '¿Nos recomendarías?(sí, no)': 'Recomendacion',
+            '¿Tienes algún comentario o sugerencia?(texto)': 'Comentarios'
         })
         
         bordamatic_df = bordamatic_df.rename(columns={
-            '¿Cómo calificarías nuestra atención al cliente?': 'Atencion_Cliente',
-            '¿Cómo calificarías el tiempo de entrega?': 'Tiempo_Entrega',
-            '¿La calidad del trabajo fue la esperada?': 'Calidad_Trabajo',
-            '¿Nos recomendarías?': 'Recomendacion',
-            '¿Tienes algún comentario o sugerencia?': 'Comentarios'
+            '¿Cómo calificarías nuestra atención al cliente?(1 al 5)': 'Atencion_Cliente',
+            '¿Cómo calificarías el tiempo de entrega? (1 al 5)': 'Tiempo_Entrega',
+            '¿La calidad del trabajo fue la esperada?(sí y no)': 'Calidad_Trabajo',
+            '¿Nos recomendarías?(sí y no)': 'Recomendacion',
+            '¿Tienes algún comentario o sugerencia?(texto)': 'Comentarios'
         })
         
         # Unificar dataframes
         df_unificado = pd.concat([costumatic_df, bordamatic_df], ignore_index=True)
         
+        # --- LIMPIEZA Y CONVERSIÓN DE DATOS ---
         # Convertir marca temporal a datetime
         df_unificado['Marca temporal'] = pd.to_datetime(df_unificado['Marca temporal'])
         df_unificado['Mes'] = df_unificado['Marca temporal'].dt.to_period('M')
+        
+        # 🔴 LIMPIEZA DE COLUMNAS NUMÉRICAS
+        columnas_numericas = ['Atencion_Cliente', 'Tiempo_Entrega', 'Satisfaccion_General']
+        for col in columnas_numericas:
+            if col in df_unificado.columns:
+                df_unificado[col] = pd.to_numeric(
+                    df_unificado[col].astype(str).str.strip(), 
+                    errors='coerce'
+                )
+        
+        # 🔴 FUNCIÓN PARA LIMPIAR VALORES SÍ/NO
+        def limpiar_si_no(valor):
+            if pd.isna(valor):
+                return valor
+            valor_str = str(valor).strip().lower()
+            if valor_str in ['sí', 'si', 's', 'yes', 'y']:
+                return 'sí'
+            elif valor_str in ['no', 'n']:
+                return 'no'
+            return valor_str
+        
+        # Aplicar limpieza a columnas Sí/No
+        if 'Calidad_Trabajo' in df_unificado.columns:
+            df_unificado['Calidad_Trabajo'] = df_unificado['Calidad_Trabajo'].apply(limpiar_si_no)
+        
+        df_unificado['Recomendacion'] = df_unificado['Recomendacion'].apply(limpiar_si_no)
+        
+        # Limpiar comentarios
+        df_unificado['Comentarios'] = df_unificado['Comentarios'].astype(str).str.strip()
+        df_unificado['Comentarios'] = df_unificado['Comentarios'].replace({
+            'nan': '', 'None': '', '': ''
+        })
         
         # --- SECCIÓN DE KPIs PRINCIPALES ---
         st.subheader("📊 KPIs Principales")
@@ -75,7 +108,7 @@ def mostrar_dashboard_satisfaccion():
         
         with col1:
             csat_general = df_unificado['Atencion_Cliente'].mean()
-            st.metric("CSAT General", f"{csat_general:.1f}/5", delta="0.2")
+            st.metric("CSAT General", f"{csat_general:.1f}/5", delta="0.2" if not pd.isna(csat_general) else "N/A")
         
         with col2:
             tasa_recomendacion = (df_unificado['Recomendacion'] == 'sí').mean() * 100
@@ -132,18 +165,22 @@ def mostrar_dashboard_satisfaccion():
             fig, ax = plt.subplots(figsize=(10, 6))
             csat_por_marca = df_filtrado.groupby('Marca')['Atencion_Cliente'].mean()
             colors = ['#FF6B6B', '#4ECDC4']
-            bars = ax.bar(csat_por_marca.index, csat_por_marca.values, color=colors, alpha=0.8)
             
-            # Añadir valores en las barras
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 0.05,
-                       f'{height:.1f}', ha='center', va='bottom')
-            
-            ax.set_ylabel('CSAT (1-5)')
-            ax.set_title('CSAT por Marca')
-            ax.set_ylim(0, 5.5)
-            st.pyplot(fig)
+            if not csat_por_marca.empty:
+                bars = ax.bar(csat_por_marca.index, csat_por_marca.values, color=colors, alpha=0.8)
+                
+                # Añadir valores en las barras
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height + 0.05,
+                           f'{height:.1f}', ha='center', va='bottom')
+                
+                ax.set_ylabel('CSAT (1-5)')
+                ax.set_title('CSAT por Marca')
+                ax.set_ylim(0, 5.5)
+                st.pyplot(fig)
+            else:
+                st.info("No hay datos suficientes para mostrar CSAT por marca")
         
         with col2:
             # Tasa de Recomendación por Marca
@@ -151,18 +188,22 @@ def mostrar_dashboard_satisfaccion():
             recomendacion_por_marca = df_filtrado.groupby('Marca')['Recomendacion'].apply(
                 lambda x: (x == 'sí').mean() * 100
             )
-            bars = ax.bar(recomendacion_por_marca.index, recomendacion_por_marca.values, 
-                         color=colors, alpha=0.8)
             
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 1,
-                       f'{height:.1f}%', ha='center', va='bottom')
-            
-            ax.set_ylabel('Tasa de Recomendación (%)')
-            ax.set_title('Recomendación por Marca')
-            ax.set_ylim(0, 100)
-            st.pyplot(fig)
+            if not recomendacion_por_marca.empty:
+                bars = ax.bar(recomendacion_por_marca.index, recomendacion_por_marca.values, 
+                             color=colors, alpha=0.8)
+                
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height + 1,
+                           f'{height:.1f}%', ha='center', va='bottom')
+                
+                ax.set_ylabel('Tasa de Recomendación (%)')
+                ax.set_title('Recomendación por Marca')
+                ax.set_ylim(0, 100)
+                st.pyplot(fig)
+            else:
+                st.info("No hay datos suficientes para mostrar recomendación por marca")
         
         # --- ANÁLISIS DETALLADO POR MARCA ---
         st.subheader("🔬 Análisis Detallado por Marca")
@@ -172,38 +213,45 @@ def mostrar_dashboard_satisfaccion():
         
         df_marca = df_filtrado[df_filtrado['Marca'] == marca_seleccionada]
         
+        # 🔴 ANÁLISIS DIFERENCIADO POR MARCA
         if marca_seleccionada == 'Costumatic':
-            # Métricas específicas de Costumatic
+            # MÉTRICAS ESPECÍFICAS DE COSTUMATIC
             col1, col2 = st.columns(2)
             
             with col1:
                 satisfaccion_productos = df_marca['Satisfaccion_General'].mean()
-                st.metric("Satisfacción con Productos", f"{satisfaccion_productos:.1f}/5")
+                st.metric("Satisfacción con Productos", f"{satisfaccion_productos:.1f}/5" if not pd.isna(satisfaccion_productos) else "N/A")
             
             with col2:
-                distribucion_satisfaccion = df_marca['Satisfaccion_General'].value_counts().sort_index()
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.pie(distribucion_satisfaccion.values, labels=distribucion_satisfaccion.index, 
-                      autopct='%1.1f%%', startangle=90)
-                ax.set_title('Distribución Satisfacción Productos')
-                st.pyplot(fig)
-        
+                if 'Satisfaccion_General' in df_marca.columns:
+                    distribucion_satisfaccion = df_marca['Satisfaccion_General'].value_counts().sort_index()
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    ax.pie(distribucion_satisfaccion.values, labels=distribucion_satisfaccion.index, 
+                          autopct='%1.1f%%', startangle=90)
+                    ax.set_title('Distribución Satisfacción Productos - Costumatic')
+                    st.pyplot(fig)
+
         else:  # Bordamatic
+            # MÉTRICAS ESPECÍFICAS DE BORDAMATIC
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 tiempo_entrega = df_marca['Tiempo_Entrega'].mean()
-                st.metric("Tiempo de Entrega", f"{tiempo_entrega:.1f}/5")
+                st.metric("Tiempo de Entrega", f"{tiempo_entrega:.1f}/5" if not pd.isna(tiempo_entrega) else "N/A")
             
             with col2:
-                calidad_trabajo = df_marca['Calidad_Trabajo'].mean()
-                st.metric("Calidad del Trabajo", f"{calidad_trabajo:.1f}/5")
+                calidad_trabajo = (df_marca['Calidad_Trabajo'] == 'sí').mean() * 100
+                st.metric("Calidad Satisfactoria", f"{calidad_trabajo:.1f}%")
             
             with col3:
                 # Triple métrica para Bordamatic
                 fig, ax = plt.subplots(figsize=(10, 6))
-                metricas = ['Atencion_Cliente', 'Tiempo_Entrega', 'Calidad_Trabajo']
+                metricas = ['Atencion_Cliente', 'Tiempo_Entrega']
                 promedios = [df_marca[metrica].mean() for metrica in metricas]
+                
+                # Agregar calidad como porcentaje (escalado a 5)
+                calidad_escalada = (df_marca['Calidad_Trabajo'] == 'sí').mean() * 5
+                promedios.append(calidad_escalada)
                 
                 bars = ax.bar(['Atención', 'Tiempo Entrega', 'Calidad'], promedios, 
                              color=['#FF6B6B', '#4ECDC4', '#45B7D1'], alpha=0.8)
@@ -221,13 +269,24 @@ def mostrar_dashboard_satisfaccion():
         # --- COMENTARIOS Y SUGERENCIAS ---
         st.subheader("💬 Comentarios y Sugerencias")
         
-        comentarios_df = df_filtrado[df_filtrado['Comentarios'].notna() & 
-                                   (df_filtrado['Comentarios'] != '')]
+        comentarios_df = df_filtrado[
+            (df_filtrado['Comentarios'].notna()) & 
+            (df_filtrado['Comentarios'] != '') &
+            (df_filtrado['Comentarios'] != 'nan')
+        ]
         
         if not comentarios_df.empty:
             for idx, row in comentarios_df.iterrows():
                 with st.expander(f"Comentario de {row['Marca']} - {row['Marca temporal'].strftime('%d/%m/%Y')}"):
                     st.write(f"**Atención:** {row['Atencion_Cliente']}/5")
+                    
+                    # 🔴 MOSTRAR MÉTRICAS ESPECÍFICAS SEGÚN MARCA
+                    if row['Marca'] == 'Costumatic' and 'Satisfaccion_General' in row:
+                        st.write(f"**Satisfacción Productos:** {row['Satisfaccion_General']}/5")
+                    elif row['Marca'] == 'Bordamatic':
+                        st.write(f"**Tiempo Entrega:** {row.get('Tiempo_Entrega', 'N/A')}/5")
+                        st.write(f"**Calidad Satisfactoria:** {row.get('Calidad_Trabajo', 'N/A')}")
+                    
                     st.write(f"**Recomendaría:** {row['Recomendacion']}")
                     st.write(f"**Comentario:** {row['Comentarios']}")
         else:
@@ -239,18 +298,21 @@ def mostrar_dashboard_satisfaccion():
         if len(df_filtrado) > 1:
             tendencias = df_filtrado.groupby(['Mes', 'Marca'])['Atencion_Cliente'].mean().unstack()
             
-            fig, ax = plt.subplots(figsize=(12, 6))
-            for marca in tendencias.columns:
-                ax.plot(tendencias.index.astype(str), tendencias[marca], 
-                       marker='o', label=marca, linewidth=2)
-            
-            ax.set_xlabel('Mes')
-            ax.set_ylabel('CSAT Promedio')
-            ax.set_title('Evolución del CSAT por Mes')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
+            if not tendencias.empty:
+                fig, ax = plt.subplots(figsize=(12, 6))
+                for marca in tendencias.columns:
+                    ax.plot(tendencias.index.astype(str), tendencias[marca], 
+                           marker='o', label=marca, linewidth=2)
+                
+                ax.set_xlabel('Mes')
+                ax.set_ylabel('CSAT Promedio')
+                ax.set_title('Evolución del CSAT por Mes')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                plt.xticks(rotation=45)
+                st.pyplot(fig)
+            else:
+                st.info("No hay datos suficientes para mostrar tendencias temporales")
         
     except Exception as e:
         st.error(f"❌ Error al cargar los datos: {str(e)}")
