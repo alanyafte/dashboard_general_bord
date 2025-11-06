@@ -47,18 +47,18 @@ def mostrar_dashboard_satisfaccion():
         
         # 🔴 RENOMBRADO DIFERENCIADO POR MARCA
         costumatic_df = costumatic_df.rename(columns={
-            '¿Cómo calificarías nuestra atención al cliente?(1 al 5)': 'Atencion_Cliente',
-            '¿Qué tan satisfecho está con los productos y servicios que ofrece Costumatic?(1 al 5)': 'Satisfaccion_General',
-            '¿Nos recomendarías?(sí, no)': 'Recomendacion',
-            '¿Tienes algún comentario o sugerencia?(texto)': 'Comentarios'
+            '¿Cómo calificarías nuestra atención al cliente?': 'Atencion_Cliente',
+            '¿Qué tan satisfecho está con los productos y servicios que ofrece Costumatic?': 'Satisfaccion_General',
+            '¿Nos recomendarías?': 'Recomendacion',
+            '¿Tienes algún comentario o sugerencia?': 'Comentarios'
         })
         
         bordamatic_df = bordamatic_df.rename(columns={
-            '¿Cómo calificarías nuestra atención al cliente?(1 al 5)': 'Atencion_Cliente',
-            '¿Cómo calificarías el tiempo de entrega? (1 al 5)': 'Tiempo_Entrega',
-            '¿La calidad del trabajo fue la esperada?(sí y no)': 'Calidad_Trabajo',
-            '¿Nos recomendarías?(sí y no)': 'Recomendacion',
-            '¿Tienes algún comentario o sugerencia?(texto)': 'Comentarios'
+            '¿Cómo calificarías nuestra atención al cliente?': 'Atencion_Cliente',
+            '¿Cómo calificarías el tiempo de entrega?': 'Tiempo_Entrega',
+            '¿La calidad del trabajo fue la esperada?': 'Calidad_Trabajo',
+            '¿Nos recomendarías?': 'Recomendacion',
+            '¿Tienes algún comentario o sugerencia?': 'Comentarios'
         })
         
         # Unificar dataframes
@@ -83,9 +83,9 @@ def mostrar_dashboard_satisfaccion():
             if pd.isna(valor):
                 return valor
             valor_str = str(valor).strip().lower()
-            if valor_str in ['sí', 'si', 's', 'yes', 'y']:
+            if valor_str in ['Sí', 'si', 's', 'yes', 'y']:
                 return 'sí'
-            elif valor_str in ['no', 'n']:
+            elif valor_str in ['No', 'n']:
                 return 'no'
             return valor_str
         
