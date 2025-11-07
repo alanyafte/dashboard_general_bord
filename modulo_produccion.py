@@ -453,7 +453,7 @@ def calcular_puntadas_automaticamente(df):
         "Susi": 6,
         "Juan": 6,
         "Esmeralda": 6,
-        "Rigoberto": 2,
+        "Rigoberto": 6,
         "Maricela": 2,
         # Agrega más operadores según necesites
     }
