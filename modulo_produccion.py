@@ -1085,7 +1085,7 @@ def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
 
     # En la función mostrar_interfaz_dashboard, después de los filtros:
     if st.sidebar.button("🧪 Ejecutar Prueba de Cabezas"):
-    prueba_fuente_cabezas(df_calculado)
+        prueba_fuente_cabezas(df_calculado)
     
     # ✅ PESTAÑAS PRINCIPALES
     tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
