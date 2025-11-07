@@ -448,7 +448,7 @@ def guardar_calculos_en_sheets(df_calculado):
 def calcular_puntadas_automaticamente(df):
     """Calcular automáticamente las puntadas cuando se cargan los datos"""
     
-    # CONFIGURACIÓN FIJA DE MÁQUINAS (puedes ajustar estos valores)
+    # CONFIGURACIÓN FIJA DE MÁQUINAS (solo como respaldo)
     CONFIG_MAQUINAS = {
         "Susi": 6,
         "Juan": 6,
@@ -474,7 +474,6 @@ def calcular_puntadas_automaticamente(df):
     grupos = df_con_fecha.groupby(['OPERADOR', 'Fecha'])
     
     for (operador, fecha), grupo in grupos:
-        cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
         ordenes_dia = len(grupo)
         
         # ✅ CORREGIDO: Calcular cambios de color por ORDEN (no por día completo)
@@ -485,6 +484,26 @@ def calcular_puntadas_automaticamente(df):
                 
             piezas = fila["CANTIDAD"]
             puntadas_base = fila["PUNTADAS"]
+            
+            # ✅ MODIFICACIÓN CLAVE: Tomar cabezas de la columna del sheets si existe
+            # Buscar en diferentes nombres posibles de columna
+            cabezas = None
+            posibles_nombres_columnas = ["CABEZAS", "NO_DE_CABEZAS", "NUMERO_CABEZAS", "NO CABEZAS"]
+            
+            for nombre_columna in posibles_nombres_columnas:
+                if nombre_columna in fila and not pd.isna(fila[nombre_columna]):
+                    try:
+                        cabezas = float(fila[nombre_columna])
+                        break  # Si encontramos un valor válido, salimos del loop
+                    except (ValueError, TypeError):
+                        continue
+            
+            # Si no se encontró en columnas, usar configuración manual como respaldo
+            if cabezas is None:
+                cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
+                fuente_cabezas = "CONFIG_MANUAL"
+            else:
+                fuente_cabezas = "COLUMNA_SHEETS"
             
             # Calcular múltiplos
             pasadas = np.ceil(piezas / cabezas)
@@ -511,6 +530,7 @@ def calcular_puntadas_automaticamente(df):
                 'CANTIDAD': piezas,
                 'PUNTADAS_BASE': puntadas_base,
                 'CABEZAS': cabezas,
+                'FUENTE_CABEZAS': fuente_cabezas,  # ✅ NUEVO: Para debugging
                 'PASADAS': pasadas,
                 'MULTIPLO': multiplo,
                 'PUNTADAS_MULTIPLOS': puntadas_multiplos,
@@ -522,6 +542,45 @@ def calcular_puntadas_automaticamente(df):
             })
     
     return pd.DataFrame(resultados)
+
+def prueba_fuente_cabezas(df_calculado):
+    """Función para probar y verificar qué fuente de datos está usando para las cabezas"""
+    
+    if df_calculado is None or df_calculado.empty:
+        st.warning("No hay datos calculados para analizar")
+        return
+    
+    st.subheader("🔍 PRUEBA: Fuente de Datos de Cabezas")
+    
+    # Mostrar estadísticas de fuentes
+    if 'FUENTE_CABEZAS' in df_calculado.columns:
+        conteo_fuentes = df_calculado['FUENTE_CABEZAS'].value_counts()
+        st.write("**📊 Distribución de Fuentes de Cabezas:**")
+        st.dataframe(conteo_fuentes.reset_index().rename(columns={'index': 'Fuente', 'FUENTE_CABEZAS': 'Registros'}))
+        
+        # Mostrar algunos ejemplos de cada fuente
+        st.write("**🔎 Ejemplos por Fuente:**")
+        
+        for fuente in conteo_fuentes.index:
+            ejemplos = df_calculado[df_calculado['FUENTE_CABEZAS'] == fuente].head(3)
+            st.write(f"**Fuente: {fuente}** (primeros 3 registros):")
+            columnas_ejemplo = ['OPERADOR', 'CABEZAS', 'FUENTE_CABEZAS', 'CANTIDAD', 'PUNTADAS_BASE', 'TOTAL_PUNTADAS']
+            columnas_disponibles = [col for col in columnas_ejemplo if col in ejemplos.columns]
+            st.dataframe(ejemplos[columnas_disponibles], use_container_width=True)
+    else:
+        st.error("❌ La columna FUENTE_CABEZAS no existe - Revisa la función de cálculo")
+    
+    # Mostrar resumen de cabezas por operador
+    st.write("**👤 Configuración Actual de Cabezas por Operador:**")
+    resumen_operadores = df_calculado.groupby('OPERADOR').agg({
+        'CABEZAS': ['mean', 'min', 'max', 'count'],
+        'FUENTE_CABEZAS': 'first'
+    }).reset_index()
+    
+    # Aplanar columnas multiindex
+    resumen_operadores.columns = ['OPERADOR', 'CABEZAS_PROMEDIO', 'CABEZAS_MIN', 'CABEZAS_MAX', 'TOTAL_REGISTROS', 'FUENTE_PRINCIPAL']
+    
+    st.dataframe(resumen_operadores, use_container_width=True)
 
 def crear_hoja_resumen_ejecutivo():
     """Crear la hoja de resumen ejecutivo si no existe"""
@@ -1023,6 +1082,10 @@ def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
     
     # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
+
+    # En la función mostrar_interfaz_dashboard, después de los filtros:
+    if st.sidebar.button("🧪 Ejecutar Prueba de Cabezas"):
+    prueba_fuente_cabezas(df_calculado)
     
     # ✅ PESTAÑAS PRINCIPALES
     tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
