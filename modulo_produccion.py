@@ -961,17 +961,26 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
     
     st.header("👤 Consulta de Puntadas y Comisiones por Operador")
     
-    # ✅ CORREGIDO: Mejorar la conversión de fechas
+    # ✅ DEBUG: Verificar datos de resumen
+    st.sidebar.subheader("🔍 DEBUG - Datos Resumen")
+    if df_resumen is None or df_resumen.empty:
+        st.sidebar.error("❌ df_resumen está VACÍO")
+        st.warning("No hay datos de resumen ejecutivo (comisiones) disponibles.")
+    else:
+        st.sidebar.success(f"✅ df_resumen tiene {len(df_resumen)} registros")
+        st.sidebar.write(f"Columnas: {list(df_resumen.columns)}")
+        if 'OPERADOR' in df_resumen.columns:
+            st.sidebar.write(f"Operadores en resumen: {df_resumen['OPERADOR'].unique()}")
+    
+    # ✅ CORREGIDO: Mejorar la conversión de fechas para df_calculado
     df_consulta = df_calculado.copy()
     
     # Asegurar que la columna FECHA esté en formato fecha correctamente
     if 'FECHA' in df_consulta.columns:
         if df_consulta['FECHA'].dtype == 'object':
-            # Intentar diferentes formatos de fecha
             try:
                 df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], errors='coerce').dt.date
             except:
-                # Si falla, intentar parsear manualmente
                 try:
                     df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], format='%Y-%m-%d', errors='coerce').dt.date
                 except:
@@ -987,8 +996,8 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
     # ✅ SOLUCIÓN CORRECTA: Agregar opción vacía al inicio
     operador_seleccionado = st.selectbox(
         "Selecciona tu operador:", 
-        [""] + operadores,  # ✅ Opción vacía primero
-        index=0  # ✅ Esto selecciona la opción vacía
+        [""] + operadores,
+        index=0
     )
     
     # ✅ Verificar si se ha seleccionado un operador válido
@@ -997,8 +1006,11 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
         st.warning("💡 _Si no encuentras tu nombre, verifica que hayas registrado producción hoy_")
         return
     
+    # ✅ DEBUG: Información del operador seleccionado
+    st.sidebar.write(f"**Operador seleccionado:** {operador_seleccionado}")
+    
     if operador_seleccionado:
-        # Filtrar datos del operador
+        # Filtrar datos del operador para puntadas
         df_operador = df_consulta[df_consulta["OPERADOR"] == operador_seleccionado].copy()
         
         # ✅ CORREGIDO: Mejorar el filtro de fechas
@@ -1040,20 +1052,8 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                 if pedido_seleccionado != "Todos":
                     df_operador = df_operador[df_operador["PEDIDO"] == pedido_seleccionado]
         
-        # ✅ DEBUG: Mostrar información sobre los datos filtrados
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🔍 Información de Datos")
-        if 'FECHA' in df_operador.columns:
-            st.sidebar.write(f"**Rango de fechas en datos:**")
-            if not df_operador.empty:
-                fecha_min = df_operador['FECHA'].min()
-                fecha_max = df_operador['FECHA'].max()
-                st.sidebar.write(f"• Más antiguo: {fecha_min}")
-                st.sidebar.write(f"• Más reciente: {fecha_max}")
-                st.sidebar.write(f"• Total días: {df_operador['FECHA'].nunique()}")
-            
-        # Mostrar métricas del operador
-        st.subheader(f"📊 Resumen de {operador_seleccionado}")
+        # Mostrar métricas del operador - PUNTADAS
+        st.subheader(f"📊 Resumen de Puntadas - {operador_seleccionado}")
         
         if not df_operador.empty:
             total_puntadas = df_operador["TOTAL_PUNTADAS"].sum()
@@ -1086,7 +1086,7 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                 st.plotly_chart(fig, use_container_width=True)
             
             # Detalle de pedidos
-            st.subheader("📋 Detalle de Pedidos")
+            st.subheader("📋 Detalle de Pedidos - Puntadas")
             columnas_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
                                'PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']
             columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
@@ -1116,11 +1116,137 @@ def mostrar_consultas_operadores(df_calculado, df_resumen):
                 mime="text/csv"
             )
             
-            # ✅ Mostrar comisiones del operador
-            mostrar_comisiones_operador(df_resumen, operador_seleccionado)
-            
         else:
-            st.warning("No hay datos para los filtros seleccionados")
+            st.warning("No hay datos de puntadas para los filtros seleccionados")
+        
+        # ✅ CORREGIDO: Llamar a la función de comisiones
+        st.markdown("---")
+        mostrar_comisiones_operador(df_resumen, operador_seleccionado)
+        
+    else:
+        st.warning("No hay datos para los filtros seleccionados")
+
+def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
+    """Mostrar comisiones y bonificaciones del operador"""
+    
+    st.subheader("💰 Comisiones y Bonificaciones")
+    
+    # ✅ DEBUG INMEDIATO
+    st.sidebar.subheader("🔍 DEBUG - Comisiones")
+    if df_resumen is None or df_resumen.empty:
+        st.sidebar.error("❌ df_resumen VACÍO en comisiones")
+        st.info("No hay datos de comisiones disponibles en este momento.")
+        return
+    
+    st.sidebar.success(f"✅ df_resumen tiene {len(df_resumen)} registros")
+    st.sidebar.write(f"Operadores en resumen: {df_resumen['OPERADOR'].unique()}")
+    
+    # Filtrar comisiones del operador seleccionado
+    df_comisiones = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+    
+    st.sidebar.write(f"Registros para {operador_seleccionado}: {len(df_comisiones)}")
+    
+    if df_comisiones.empty:
+        st.info(f"💰 **Comisiones**: No hay comisiones registradas para **{operador_seleccionado}**.")
+        st.info("💡 _Las comisiones se actualizan automáticamente cuando se generan los cálculos de puntadas_")
+        return
+    
+    # ✅ Selector de tipo de vista - VERSIÓN SIMPLIFICADA
+    vista_seleccionada = st.radio(
+        "Tipo de vista:",
+        ["Todo el Historial", "Períodos de Corte (Días 10-25)"],
+        help="Períodos de Corte: Solo muestra comisiones de los días 10 al 25 de cada mes"
+    )
+    
+    # ✅ APLICAR FILTRO SEGÚN SELECCIÓN
+    df_comisiones_filtrado = df_comisiones.copy()
+    
+    if vista_seleccionada == "Períodos de Corte (Días 10-25)":
+        if 'FECHA' in df_comisiones_filtrado.columns:
+            # Convertir FECHA a datetime
+            df_comisiones_filtrado['FECHA'] = pd.to_datetime(df_comisiones_filtrado['FECHA'], errors='coerce')
+            
+            # Filtrar solo días entre 10 y 25 de cada mes
+            df_comisiones_filtrado['DIA_DEL_MES'] = df_comisiones_filtrado['FECHA'].dt.day
+            df_comisiones_filtrado = df_comisiones_filtrado[
+                (df_comisiones_filtrado['DIA_DEL_MES'] >= 10) & 
+                (df_comisiones_filtrado['DIA_DEL_MES'] <= 25)
+            ]
+    
+    # Mostrar estadísticas
+    st.info(f"**📊 Vista:** {vista_seleccionada} | **Registros:** {len(df_comisiones_filtrado)}")
+    
+    # Calcular totales
+    total_comision = 0
+    total_puntadas = 0
+    
+    if not df_comisiones_filtrado.empty:
+        if 'COMISION_TOTAL' in df_comisiones_filtrado.columns:
+            total_comision = df_comisiones_filtrado['COMISION_TOTAL'].sum()
+        if 'TOTAL_PUNTADAS' in df_comisiones_filtrado.columns:
+            total_puntadas = df_comisiones_filtrado['TOTAL_PUNTADAS'].sum()
+    
+    # Mostrar métricas
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if vista_seleccionada == "Períodos de Corte (Días 10-25)":
+            st.metric("Total Puntadas Períodos Corte", f"{total_puntadas:,.0f}")
+        else:
+            st.metric("Total Puntadas Acumuladas", f"{total_puntadas:,.0f}")
+    
+    with col2:
+        st.metric("Total Comisión", f"${total_comision:,.2f}" if total_comision > 0 else "Por calcular")
+    
+    with col3:
+        if total_puntadas > 0 and total_comision > 0:
+            tasa_comision = (total_comision / total_puntadas) * 1000
+            st.metric("Tasa por 1000 puntadas", f"${tasa_comision:.2f}")
+        else:
+            st.metric("Tasa por 1000 puntadas", "$0.00")
+    
+    # Mostrar tabla detallada
+    st.write(f"**📋 Detalle de Comisiones ({vista_seleccionada}):**")
+    
+    columnas_comisiones = ['FECHA', 'TOTAL_PUNTADAS', 'COMISION', 'BONIFICACION', 'COMISION_TOTAL']
+    columnas_disponibles = [col for col in columnas_comisiones if col in df_comisiones_filtrado.columns]
+    
+    if not df_comisiones_filtrado.empty and columnas_disponibles:
+        df_mostrar = df_comisiones_filtrado[columnas_disponibles].copy()
+        
+        # Formatear para mostrar
+        if 'FECHA' in df_mostrar.columns:
+            df_mostrar['FECHA'] = df_mostrar['FECHA'].dt.strftime('%Y-%m-%d')
+        
+        if 'TOTAL_PUNTADAS' in df_mostrar.columns:
+            df_mostrar['TOTAL_PUNTADAS'] = df_mostrar['TOTAL_PUNTADAS'].apply(lambda x: f"{x:,.0f}")
+        
+        if 'COMISION' in df_mostrar.columns:
+            df_mostrar['COMISION'] = df_mostrar['COMISION'].apply(
+                lambda x: f"${x:,.2f}" if x not in ['', None] and pd.notna(x) else "Por calcular"
+            )
+        
+        if 'BONIFICACION' in df_mostrar.columns:
+            df_mostrar['BONIFICACION'] = df_mostrar['BONIFICACION'].apply(
+                lambda x: f"${x:,.2f}" if x not in ['', None] and pd.notna(x) else "Por calcular"
+            )
+        
+        if 'COMISION_TOTAL' in df_mostrar.columns:
+            df_mostrar['COMISION_TOTAL'] = df_mostrar['COMISION_TOTAL'].apply(
+                lambda x: f"${x:,.2f}" if x not in ['', None] and pd.notna(x) else "Por calcular"
+            )
+        
+        st.dataframe(df_mostrar, use_container_width=True)
+        
+        # Descargar
+        csv_data = df_comisiones_filtrado[columnas_disponibles].to_csv(index=False)
+        st.download_button(
+            label=f"📥 Descargar Comisiones ({vista_seleccionada})",
+            data=csv_data,
+            file_name=f"comisiones_{operador_seleccionado}_{vista_seleccionada.replace(' ', '_')}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("No hay datos de comisiones para mostrar con los filtros aplicados")
 
 # ✅ MODIFICAR la función principal para incluir el resumen ejecutivo
 def mostrar_dashboard_produccion():
