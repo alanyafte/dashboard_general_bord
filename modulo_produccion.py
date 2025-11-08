@@ -768,6 +768,7 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     """Mostrar comisiones y bonificaciones del operador CON OPCIÓN DE PERÍODOS DE CORTE"""
     
     if df_resumen.empty or operador_seleccionado is None:
+        st.info("No hay datos de resumen ejecutivo disponibles.")
         return
     
     # Filtrar comisiones del operador seleccionado
@@ -779,6 +780,14 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     
     st.subheader("💰 Comisiones y Bonificaciones")
     
+    # ✅ DEBUG: Mostrar información sobre los datos
+    st.sidebar.write(f"**DEBUG - Datos de {operador_seleccionado}:**")
+    st.sidebar.write(f"• Registros totales: {len(df_comisiones)}")
+    if 'FECHA' in df_comisiones.columns:
+        st.sidebar.write(f"• Columnas: {list(df_comisiones.columns)}")
+        st.sidebar.write(f"• Tipo de FECHA: {df_comisiones['FECHA'].dtype}")
+        st.sidebar.write(f"• Ejemplo de fechas: {df_comisiones['FECHA'].head(3).tolist()}")
+    
     # ✅ NUEVO: Selector de tipo de vista
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -788,28 +797,44 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
             help="Períodos de Corte: Solo muestra comisiones de los días 10 al 25 de cada mes"
         )
     
-    # ✅ APLICAR FILTRO SEGÚN SELECCIÓN
+    # ✅ APLICAR FILTRO SEGÚN SELECCIÓN - CORREGIDO
     df_comisiones_filtrado = df_comisiones.copy()
     registros_originales = len(df_comisiones)
     
     if vista_seleccionada == "Períodos de Corte (Días 10-25)":
         if 'FECHA' in df_comisiones_filtrado.columns:
-            # Convertir FECHA a datetime
-            df_comisiones_filtrado['FECHA'] = pd.to_datetime(df_comisiones_filtrado['FECHA'], errors='coerce')
+            # ✅ CORREGIDO: Asegurar que FECHA sea datetime
+            if df_comisiones_filtrado['FECHA'].dtype == 'object':
+                try:
+                    df_comisiones_filtrado['FECHA'] = pd.to_datetime(df_comisiones_filtrado['FECHA'], format='%Y-%m-%d', errors='coerce')
+                except:
+                    df_comisiones_filtrado['FECHA'] = pd.to_datetime(df_comisiones_filtrado['FECHA'], errors='coerce')
             
-            # Filtrar solo días entre 10 y 25 de cada mes
+            # ✅ CORREGIDO: Filtrar solo días entre 10 y 25 de cada mes
             df_comisiones_filtrado['DIA_DEL_MES'] = df_comisiones_filtrado['FECHA'].dt.day
-            df_comisiones_filtrado = df_comisiones_filtrado[
-                (df_comisiones_filtrado['DIA_DEL_MES'] >= 10) & 
-                (df_comisiones_filtrado['DIA_DEL_MES'] <= 25)
-            ].dropna(subset=['DIA_DEL_MES'])
+            
+            # Mostrar información de debug
+            st.sidebar.write(f"• Días encontrados: {df_comisiones_filtrado['DIA_DEL_MES'].unique()}")
+            
+            # Aplicar filtro
+            mask = (df_comisiones_filtrado['DIA_DEL_MES'] >= 10) & (df_comisiones_filtrado['DIA_DEL_MES'] <= 25)
+            df_comisiones_filtrado = df_comisiones_filtrado[mask]
+            
+            st.sidebar.write(f"• Registros después de filtro: {len(df_comisiones_filtrado)}")
     
     # Ordenar por fecha (más reciente primero)
-    df_comisiones_filtrado = df_comisiones_filtrado.sort_values('FECHA', ascending=False)
+    if not df_comisiones_filtrado.empty and 'FECHA' in df_comisiones_filtrado.columns:
+        df_comisiones_filtrado = df_comisiones_filtrado.sort_values('FECHA', ascending=False)
     
-    # Mostrar resumen de comisiones
-    total_comision = df_comisiones_filtrado['COMISION_TOTAL'].sum() if 'COMISION_TOTAL' in df_comisiones_filtrado.columns else 0
-    total_puntadas = df_comisiones_filtrado['TOTAL_PUNTADAS'].sum() if 'TOTAL_PUNTADAS' in df_comisiones_filtrado.columns else 0
+    # ✅ CORREGIDO: Mostrar resumen de comisiones con verificación
+    total_comision = 0
+    total_puntadas = 0
+    
+    if not df_comisiones_filtrado.empty:
+        if 'COMISION_TOTAL' in df_comisiones_filtrado.columns:
+            total_comision = df_comisiones_filtrado['COMISION_TOTAL'].sum()
+        if 'TOTAL_PUNTADAS' in df_comisiones_filtrado.columns:
+            total_puntadas = df_comisiones_filtrado['TOTAL_PUNTADAS'].sum()
     
     # ✅ NUEVO: Mostrar estadísticas del filtro aplicado
     with col2:
@@ -817,9 +842,10 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         **📊 Estadísticas:**
         - **Vista:** {vista_seleccionada}
         - **Registros:** {len(df_comisiones_filtrado)} de {registros_originales} totales
-        - **Períodos:** {df_comisiones_filtrado['FECHA'].nunique() if not df_comisiones_filtrado.empty else 0} días distintos
+        - **Períodos:** {df_comisiones_filtrado['FECHA'].nunique() if not df_comisiones_filtrado.empty and 'FECHA' in df_comisiones_filtrado.columns else 0} días distintos
         """)
     
+    # Mostrar métricas
     col1, col2, col3 = st.columns(3)
     with col1:
         # ✅ NUEVO: Mostrar etiqueta diferente según la vista
@@ -832,35 +858,45 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         st.metric("Total Comisión", f"${total_comision:,.2f}" if total_comision > 0 else "Por calcular")
     
     with col3:
-        if total_puntadas > 0:
-            tasa_comision = (total_comision / total_puntadas) * 1000 if total_comision > 0 else 0
+        if total_puntadas > 0 and total_comision > 0:
+            tasa_comision = (total_comision / total_puntadas) * 1000
             st.metric("Tasa por 1000 puntadas", f"${tasa_comision:.2f}")
         else:
             st.metric("Tasa por 1000 puntadas", "$0.00")
     
     # ✅ NUEVO: Gráfico de distribución por mes (solo para períodos de corte)
-    if vista_seleccionada == "Períodos de Corte (Días 10-25)" and not df_comisiones_filtrado.empty:
+    if (vista_seleccionada == "Períodos de Corte (Días 10-25)" and 
+        not df_comisiones_filtrado.empty and 
+        'FECHA' in df_comisiones_filtrado.columns):
+        
         st.subheader("📈 Distribución por Mes - Períodos de Corte")
         
-        # Extraer año y mes para agrupar
-        df_comisiones_filtrado['AÑO_MES'] = df_comisiones_filtrado['FECHA'].dt.to_period('M').astype(str)
-        
-        puntadas_por_mes = df_comisiones_filtrado.groupby('AÑO_MES')['TOTAL_PUNTADAS'].sum().reset_index()
-        
-        if len(puntadas_por_mes) > 1:
-            fig = px.bar(
-                puntadas_por_mes,
-                x='AÑO_MES',
-                y='TOTAL_PUNTADAS',
-                title=f"Puntadas por Mes - {operador_seleccionado}",
-                labels={'AÑO_MES': 'Mes', 'TOTAL_PUNTADAS': 'Total Puntadas'},
-                text_auto=True
-            )
-            fig.update_traces(texttemplate='%{y:,.0f}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
+        try:
+            # Extraer año y mes para agrupar
+            df_comisiones_filtrado['AÑO_MES'] = df_comisiones_filtrado['FECHA'].dt.to_period('M').astype(str)
+            
+            puntadas_por_mes = df_comisiones_filtrado.groupby('AÑO_MES')['TOTAL_PUNTADAS'].sum().reset_index()
+            
+            if len(puntadas_por_mes) > 0:
+                fig = px.bar(
+                    puntadas_por_mes,
+                    x='AÑO_MES',
+                    y='TOTAL_PUNTADAS',
+                    title=f"Puntadas por Mes - {operador_seleccionado}",
+                    labels={'AÑO_MES': 'Mes', 'TOTAL_PUNTADAS': 'Total Puntadas'},
+                    text_auto=True
+                )
+                fig.update_traces(texttemplate='%{y:,.0f}', textposition='outside')
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error al generar gráfico: {str(e)}")
     
     # Mostrar tabla detallada de comisiones
     st.write(f"**📋 Detalle de Comisiones por Fecha ({vista_seleccionada}):**")
+    
+    if df_comisiones_filtrado.empty:
+        st.warning("No hay registros de comisiones para los filtros aplicados")
+        return
     
     columnas_comisiones = ['FECHA', 'TOTAL_PUNTADAS', 'COMISION', 'BONIFICACION', 'COMISION_TOTAL', 'FECHA_ACTUALIZACION']
     columnas_disponibles = [col for col in columnas_comisiones if col in df_comisiones_filtrado.columns]
@@ -869,34 +905,45 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     
     # Formatear columnas
     if 'FECHA' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['FECHA'] = df_mostrar_comisiones['FECHA'].dt.strftime('%Y-%m-%d')
+        try:
+            df_mostrar_comisiones['FECHA'] = df_mostrar_comisiones['FECHA'].dt.strftime('%Y-%m-%d')
+        except:
+            pass  # Si ya es string, dejarlo como está
     
     if 'TOTAL_PUNTADAS' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['TOTAL_PUNTADAS'] = df_mostrar_comisiones['TOTAL_PUNTADAS'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
+        df_mostrar_comisiones['TOTAL_PUNTADAS'] = df_mostrar_comisiones['TOTAL_PUNTADAS'].apply(
+            lambda x: f"{x:,.0f}" if pd.notna(x) and x != "" else "N/A"
+        )
     
     if 'COMISION' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['COMISION'] = df_mostrar_comisiones['COMISION'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
+        df_mostrar_comisiones['COMISION'] = df_mostrar_comisiones['COMISION'].apply(
+            lambda x: f"${float(x):,.2f}" if pd.notna(x) and x != "" and str(x).strip() != "" else "Por calcular"
+        )
     
     if 'BONIFICACION' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['BONIFICACION'] = df_mostrar_comisiones['BONIFICACION'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
+        df_mostrar_comisiones['BONIFICACION'] = df_mostrar_comisiones['BONIFICACION'].apply(
+            lambda x: f"${float(x):,.2f}" if pd.notna(x) and x != "" and str(x).strip() != "" else "Por calcular"
+        )
     
     if 'COMISION_TOTAL' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['COMISION_TOTAL'] = df_mostrar_comisiones['COMISION_TOTAL'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
+        df_mostrar_comisiones['COMISION_TOTAL'] = df_mostrar_comisiones['COMISION_TOTAL'].apply(
+            lambda x: f"${float(x):,.2f}" if pd.notna(x) and x != "" and str(x).strip() != "" else "Por calcular"
+        )
     
-    if not df_mostrar_comisiones.empty:
-        st.dataframe(df_mostrar_comisiones, use_container_width=True, height=300)
-    else:
-        st.warning("No hay registros de comisiones para los filtros aplicados")
+    st.dataframe(df_mostrar_comisiones, use_container_width=True, height=300)
     
     # Opción para descargar comisiones
     if not df_comisiones_filtrado.empty:
-        csv_comisiones = df_comisiones_filtrado[columnas_disponibles].to_csv(index=False)
+        # Preparar datos para descarga
+        df_descarga = df_comisiones_filtrado[columnas_disponibles].copy()
         
         # ✅ NUEVO: Nombre del archivo según la vista seleccionada
         if vista_seleccionada == "Períodos de Corte (Días 10-25)":
             nombre_archivo = f"comisiones_corte_{operador_seleccionado}.csv"
         else:
             nombre_archivo = f"comisiones_completas_{operador_seleccionado}.csv"
+        
+        csv_comisiones = df_descarga.to_csv(index=False, encoding='utf-8')
         
         st.download_button(
             label=f"📥 Descargar Mis Comisiones ({vista_seleccionada})",
