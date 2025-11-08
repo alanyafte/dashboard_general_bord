@@ -1083,10 +1083,10 @@ def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
     # ✅ FILTROS
     df_filtrado = aplicar_filtros(df)
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔧 Herramientas de Debug")
-    if st.sidebar.button("🧪 Ejecutar Prueba de Cabezas"):
-        prueba_fuente_cabezas(df_calculado)
+    #st.sidebar.markdown("---")
+    #st.sidebar.subheader("🔧 Herramientas de Debug")
+    #if st.sidebar.button("🧪 Ejecutar Prueba de Cabezas"):
+        #prueba_fuente_cabezas(df_calculado)
     
     # ✅ PESTAÑAS PRINCIPALES
     tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
