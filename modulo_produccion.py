@@ -463,7 +463,7 @@ def mostrar_dashboard_produccion():
         tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
         
         with tab1:
-            mostrar_dashboard_compacto(df_filtrado, df_calculado)
+            mostrar_dashboard_produccion(df_filtrado, df_calculado)
         
         with tab2:
             st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
