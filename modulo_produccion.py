@@ -427,7 +427,7 @@ def cargar_y_calcular_datos():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # ✅ DASHBOARD PRINCIPAL OPTIMIZADO CON TODOS LOS GRÁFICOS
-def mostrar_dashboard_compacto(df, df_calculado=None):
+def mostrar_dashboard(df, df_calculado=None):
     """Dashboard principal compacto pero con TODOS los gráficos"""
     
     # 1. MÉTRICAS PRINCIPALES
