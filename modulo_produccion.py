@@ -232,9 +232,9 @@ def cargar_y_calcular_datos():
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# ✅ DASHBOARD PRINCIPAL OPTIMIZADO
+# ✅ DASHBOARD PRINCIPAL OPTIMIZADO CON TODOS LOS GRÁFICOS
 def mostrar_dashboard_compacto(df, df_calculado=None):
-    """Dashboard principal compacto y organizado"""
+    """Dashboard principal compacto pero con TODOS los gráficos"""
     
     # 1. MÉTRICAS PRINCIPALES
     st.subheader("📈 Métricas de Producción")
@@ -260,22 +260,25 @@ def mostrar_dashboard_compacto(df, df_calculado=None):
         if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
             total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
             st.metric("Total Puntadas", f"{total_puntadas_calculadas:,.0f}")
-    
-    # 2. ANÁLISIS EN PESTAÑAS
-    tab_ops, tab_trends, tab_data = st.tabs(["👥 Operadores", "📈 Tendencias", "📋 Datos"])
+
+    # 2. ANÁLISIS EN PESTAÑAS ORGANIZADAS
+    tab_ops, tab_puntadas, tab_trends, tab_data = st.tabs(["👥 Operadores", "🪡 Puntadas", "📈 Tendencias", "📋 Datos"])
     
     with tab_ops:
-        mostrar_analisis_operadores_compacto(df, df_calculado)
+        mostrar_analisis_operadores_completo(df, df_calculado)
+    
+    with tab_puntadas:
+        mostrar_analisis_puntadas_completo(df, df_calculado)
     
     with tab_trends:
-        mostrar_tendencias_compactas(df, df_calculado)
+        mostrar_tendencias_completas(df, df_calculado)
     
     with tab_data:
         with st.expander("📊 Ver datos detallados de producción", expanded=False):
             st.dataframe(df, use_container_width=True, height=400)
 
-def mostrar_analisis_operadores_compacto(df, df_calculado=None):
-    """Análisis de operadores en formato compacto"""
+def mostrar_analisis_operadores_completo(df, df_calculado=None):
+    """Análisis completo de operadores con todos los gráficos"""
     
     if df.empty or "OPERADOR" not in df.columns:
         return
@@ -288,8 +291,20 @@ def mostrar_analisis_operadores_compacto(df, df_calculado=None):
             puntadas_por_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).reset_index()
             puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
             
-            st.write("**🏆 Ranking por Puntadas:**")
+            st.write("**🏆 Ranking por Puntadas Calculadas:**")
             st.dataframe(puntadas_por_operador, use_container_width=True)
+            
+            # Gráfico de barras de puntadas por operador
+            fig = px.bar(
+                puntadas_por_operador, 
+                x='Operador', 
+                y='Total Puntadas',
+                title="Puntadas Totales por Operador",
+                color='Total Puntadas',
+                text='Total Puntadas'
+            )
+            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         # Métricas básicas por operador
@@ -305,9 +320,83 @@ def mostrar_analisis_operadores_compacto(df, df_calculado=None):
         
         st.write("**📊 Desempeño por Operador:**")
         st.dataframe(metricas_operador, use_container_width=True)
+        
+        # Gráfico de pedidos por operador
+        fig2 = px.bar(
+            metricas_operador, 
+            x='Operador', 
+            y='Total Pedidos',
+            title="Pedidos por Operador",
+            color='Total Pedidos',
+            text='Total Pedidos'
+        )
+        fig2.update_traces(texttemplate='%{text}', textposition='outside')
+        st.plotly_chart(fig2, use_container_width=True)
 
-def mostrar_tendencias_compactas(df, df_calculado=None):
-    """Tendencias temporales en formato compacto"""
+def mostrar_analisis_puntadas_completo(df, df_calculado=None):
+    """Análisis completo de puntadas con todos los gráficos"""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Análisis de puntadas base
+        if "PUNTADAS" in df.columns:
+            st.subheader("🪡 Análisis de Puntadas Base")
+            
+            # Top operadores por puntadas base
+            puntadas_por_operador = df.groupby("OPERADOR")["PUNTADAS"].sum().sort_values(ascending=False).reset_index()
+            puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
+            
+            st.write("**🏆 Ranking por Puntadas Base:**")
+            st.dataframe(puntadas_por_operador, use_container_width=True)
+    
+    with col2:
+        # Distribución de puntadas por tipo de prenda
+        if "TIPO DE PRENDA" in df.columns and "PUNTADAS" in df.columns:
+            puntadas_por_prenda = df.groupby("TIPO DE PRENDA")["PUNTADAS"].sum().reset_index()
+            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas']
+            
+            if len(puntadas_por_prenda) > 0:
+                fig = px.pie(
+                    puntadas_por_prenda, 
+                    values='Total Puntadas', 
+                    names='Tipo de Prenda',
+                    title="Distribución de Puntadas Base por Tipo de Prenda"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # Análisis de puntadas calculadas
+    if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+        st.subheader("🧵 Análisis de Puntadas Calculadas")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            # Distribución de puntadas calculadas por tipo de prenda
+            if "TIPO_PRENDA" in df_calculado.columns:
+                puntadas_por_prenda = df_calculado.groupby("TIPO_PRENDA")["TOTAL_PUNTADAS"].sum().reset_index()
+                puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas Calculadas']
+                
+                if len(puntadas_por_prenda) > 0:
+                    fig = px.pie(
+                        puntadas_por_prenda, 
+                        values='Total Puntadas Calculadas', 
+                        names='Tipo de Prenda',
+                        title="Distribución de Puntadas Calculadas por Tipo de Prenda"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col4:
+            # Top diseños más producidos
+            if "DISEÑO" in df.columns:
+                top_diseños = df["DISEÑO"].value_counts().head(10).reset_index()
+                top_diseños.columns = ['Diseño', 'Cantidad']
+                
+                st.write("**🎨 Top Diseños:**")
+                st.dataframe(top_diseños, use_container_width=True)
+
+def mostrar_tendencias_completas(df, df_calculado=None):
+    """Tendencias temporales completas con todos los gráficos"""
     
     if df.empty or "Marca temporal" not in df.columns:
         st.info("No hay datos temporales disponibles.")
@@ -319,19 +408,61 @@ def mostrar_tendencias_compactas(df, df_calculado=None):
         
         tendencias = df_temporal.groupby('Fecha').agg({
             '#DE PEDIDO': 'count',
-            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
+            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
+            'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
         }).reset_index()
         
+        # ✅ AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            df_calc_temporal = df_calculado.copy()
+            if 'FECHA' in df_calc_temporal.columns:
+                if df_calc_temporal['FECHA'].dtype == 'object':
+                    df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+                
+                tendencias_calc = df_calc_temporal.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
+                tendencias_calc.columns = ['Fecha', 'TOTAL_PUNTADAS']
+                tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
+        
         if len(tendencias) > 1:
-            # Gráfico combinado compacto
-            fig = px.line(
+            # Gráfico de pedidos por día
+            fig1 = px.line(
                 tendencias, 
                 x='Fecha', 
-                y=['#DE PEDIDO', 'CANTIDAD'] if 'CANTIDAD' in tendencias.columns else ['#DE PEDIDO'],
-                title="Tendencias de Producción",
+                y='#DE PEDIDO',
+                title="📦 Evolución de Pedidos por Día",
                 markers=True
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig1, use_container_width=True)
+            
+            # Gráficos en columnas para ahorrar espacio
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Gráfico de puntadas base por día
+                if "PUNTADAS" in df.columns:
+                    fig2 = px.line(
+                        tendencias, 
+                        x='Fecha', 
+                        y='PUNTADAS',
+                        title="🪡 Evolución de Puntadas Base por Día",
+                        markers=True,
+                        color_discrete_sequence=['red']
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+            
+            with col2:
+                # Gráfico de puntadas calculadas por día
+                if "TOTAL_PUNTADAS" in tendencias.columns and not tendencias["TOTAL_PUNTADAS"].isna().all():
+                    fig3 = px.line(
+                        tendencias, 
+                        x='Fecha', 
+                        y='TOTAL_PUNTADAS',
+                        title="🧵 Evolución de Puntadas Calculadas por Día",
+                        markers=True,
+                        color_discrete_sequence=['green']
+                    )
+                    st.plotly_chart(fig3, use_container_width=True)
+                    
         else:
             st.info("Se necesitan datos de más de un día para mostrar tendencias.")
             
@@ -385,7 +516,7 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
     with col3:
         st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
     
-    # 2. GRÁFICO OPCIONAL (en expander)
+    # 2. GRÁFICO DE EVOLUCIÓN (en expander)
     with st.expander("📈 Ver evolución de puntadas", expanded=False):
         if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
             puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
