@@ -426,106 +426,52 @@ def cargar_y_calcular_datos():
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# ✅ DASHBOARD PRINCIPAL OPTIMIZADO CON TODOS LOS GRÁFICOS
-def mostrar_dashboard_compacto(df, df_calculado=None):
-    """Dashboard principal compacto pero con TODOS los gráficos"""
-    
-    # 1. MÉTRICAS PRINCIPALES
-    st.subheader("📈 Métricas de Producción")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_pedidos = len(df)
-        st.metric("Total Pedidos", f"{total_pedidos:,}")
-    
-    with col2:
-        if "CANTIDAD" in df.columns:
-            total_unidades = df["CANTIDAD"].sum()
-            st.metric("Total Unidades", f"{total_unidades:,}")
-        else:
-            st.metric("Operadores Activos", df["OPERADOR"].nunique())
-    
-    with col3:
-        if "OPERADOR" in df.columns:
-            operadores_activos = df["OPERADOR"].nunique()
-            st.metric("Operadores Activos", operadores_activos)
-    
-    with col4:
-        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
-            total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
-            st.metric("Total Puntadas", f"{total_puntadas_calculadas:,.0f}")
-
-    # 2. ANÁLISIS EN PESTAÑAS ORGANIZADAS
-    tab_ops, tab_puntadas, tab_trends, tab_data = st.tabs(["👥 Operadores", "🪡 Puntadas", "📈 Tendencias", "📋 Datos"])
-    
-    with tab_ops:
-        mostrar_analisis_operadores_completo(df, df_calculado)
-    
-    with tab_puntadas:
-        mostrar_analisis_puntadas_completo(df, df_calculado)
-    
-    with tab_trends:
-        mostrar_tendencias_completas(df, df_calculado)
-    
-    with tab_data:
-        with st.expander("📊 Ver datos detallados de producción", expanded=False):
-            st.dataframe(df, use_container_width=True, height=400)
-
-def mostrar_analisis_operadores_completo(df, df_calculado=None):
-    """Análisis completo de operadores con todos los gráficos"""
-    
-    if df.empty or "OPERADOR" not in df.columns:
-        return
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top operadores por puntadas calculadas
+# ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO (CORREGIDA)
+def mostrar_dashboard_produccion():
+    """Función principal que se llama desde app_principal.py - VERSIÓN CORREGIDA"""
+    try:
+        # Botón de actualización
+        st.sidebar.header("🔄 Actualizar Datos")
+        if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+        
+        # Cargar datos
+        df, df_calculado, df_resumen = cargar_y_calcular_datos()
+        
+        st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
+        st.sidebar.info(f"📊 Registros: {len(df)}")
+        if not df_calculado.empty:
+            st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
+        if not df_resumen.empty:
+            st.sidebar.success(f"💰 Comisiones: {len(df_resumen)} registros")
+        
+        # INTERFAZ OPTIMIZADA
+        st.title("🏭 Dashboard de Producción")
+        
+        # Mostrar resumen rápido
+        st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
         if df_calculado is not None and not df_calculado.empty:
-            puntadas_por_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).reset_index()
-            puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
-            
-            st.write("**🏆 Ranking por Puntadas Calculadas:**")
-            st.dataframe(puntadas_por_operador, use_container_width=True)
-            
-            # Gráfico de barras de puntadas por operador
-            fig = px.bar(
-                puntadas_por_operador, 
-                x='Operador', 
-                y='Total Puntadas',
-                title="Puntadas Totales por Operador",
-                color='Total Puntadas',
-                text='Total Puntadas'
-            )
-            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Métricas básicas por operador
-        metricas_operador = df.groupby("OPERADOR").agg({
-            '#DE PEDIDO': 'count',
-            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None
-        }).reset_index()
+            st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
+        if df_resumen is not None and not df_resumen.empty:
+            st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
         
-        if 'CANTIDAD' in df.columns:
-            metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades']
-        else:
-            metricas_operador.columns = ['Operador', 'Total Pedidos']
+        # FILTROS
+        df_filtrado = aplicar_filtros(df)
         
-        st.write("**📊 Desempeño por Operador:**")
-        st.dataframe(metricas_operador, use_container_width=True)
+        # PESTAÑAS PRINCIPALES OPTIMIZADAS
+        tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
         
-        # Gráfico de pedidos por operador
-        fig2 = px.bar(
-            metricas_operador, 
-            x='Operador', 
-            y='Total Pedidos',
-            title="Pedidos por Operador",
-            color='Total Pedidos',
-            text='Total Pedidos'
-        )
-        fig2.update_traces(texttemplate='%{text}', textposition='outside')
-        st.plotly_chart(fig2, use_container_width=True)
+        with tab1:
+            mostrar_dashboard_compacto(df_filtrado, df_calculado)
+        
+        with tab2:
+            st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
+            mostrar_consultas_operadores_compacto(df_calculado, df_resumen)
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar los datos: {str(e)}")
+        st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
 
 def mostrar_analisis_puntadas_completo(df, df_calculado=None):
     """Análisis completo de puntadas con todos los gráficos"""
