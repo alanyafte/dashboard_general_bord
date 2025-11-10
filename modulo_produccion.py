@@ -918,7 +918,6 @@ def clasificar_periodo(fila):
     
     return "Otro"
 
-# ✅ También actualizar la función principal para mostrar mejor la información
 def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     """Mostrar comisiones y bonificaciones del operador CON PERÍODOS DE CORTE CORREGIDOS"""
     
@@ -935,44 +934,51 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         st.info(f"💰 **Comisiones**: No hay comisiones registradas para **{operador_seleccionado}**.")
         return
     
-    # ✅ MEJORADO: Selector con ejemplos claros
+    # ✅ DEBUG: Mostrar información de los datos
+    st.sidebar.subheader(f"🔍 DEBUG {operador_seleccionado}")
+    st.sidebar.write(f"Registros totales: {len(df_comisiones)}")
+    if 'FECHA' in df_comisiones.columns:
+        st.sidebar.write(f"Rango fechas: {df_comisiones['FECHA'].min()} a {df_comisiones['FECHA'].max()}")
+    
     vista_seleccionada = st.radio(
         "Tipo de vista:",
         ["Todo el Historial", "Períodos de Corte"],
-        help="""Períodos de Corte (Ejemplos):
-        • 1er Corte Marzo: 26 Feb - 10 Mar
-        • 2do Corte Marzo: 11 Mar - 25 Mar
-        • 1er Corte Abril: 26 Mar - 10 Abr"""
+        help="Períodos de Corte: 26/mes_anterior al 10/mes_actual y 11-25/mes_actual"
     )
     
     # Aplicar filtro según selección
     df_comisiones_filtrado = df_comisiones.copy()
+    registros_originales = len(df_comisiones)
     
     if vista_seleccionada == "Períodos de Corte":
         if 'FECHA' in df_comisiones_filtrado.columns:
             try:
+                # Convertir FECHA a datetime
                 if df_comisiones_filtrado['FECHA'].dtype == 'object':
                     df_comisiones_filtrado['FECHA'] = pd.to_datetime(df_comisiones_filtrado['FECHA'], errors='coerce')
                 
                 if pd.api.types.is_datetime64_any_dtype(df_comisiones_filtrado['FECHA']):
-                    df_comisiones_filtrado = filtrar_por_periodos_corte(df_comisiones_filtrado)
+                    # ✅ APLICAR FILTRO SIMPLIFICADO PARA PRUEBA
+                    df_comisiones_filtrado = aplicar_filtro_periodos_simple(df_comisiones_filtrado)
+                    
+                    # DEBUG
+                    st.sidebar.write(f"Registros después filtro: {len(df_comisiones_filtrado)}")
+                    if not df_comisiones_filtrado.empty:
+                        st.sidebar.write(f"Fechas en filtro: {df_comisiones_filtrado['FECHA'].min()} a {df_comisiones_filtrado['FECHA'].max()}")
                     
             except Exception as e:
-                st.error(f"Error al aplicar filtro de períodos: {str(e)}")
-    
-    # ... (el resto del código se mantiene igual) ...
+                st.error(f"Error al aplicar filtro: {str(e)}")
+                st.sidebar.error(f"Error filtro: {str(e)}")
     
     # Mostrar estadísticas
-    st.info(f"**📊 Vista:** {vista_seleccionada} | **Registros:** {len(df_comisiones_filtrado)}")
+    st.info(f"**📊 Vista:** {vista_seleccionada} | **Registros:** {len(df_comisiones_filtrado)} de {registros_originales}")
     
     # Calcular totales
     total_comision = 0
     total_puntadas = 0
     
     if not df_comisiones_filtrado.empty:
-        # ✅ CORREGIDO: Manejar valores vacíos o strings en las columnas numéricas
         if 'COMISION_TOTAL' in df_comisiones_filtrado.columns:
-            # Convertir a numérico, forzando errores a NaN
             comisiones_numeric = pd.to_numeric(df_comisiones_filtrado['COMISION_TOTAL'], errors='coerce')
             total_comision = comisiones_numeric.sum()
         
@@ -983,7 +989,7 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     # Mostrar métricas
     col1, col2, col3 = st.columns(3)
     with col1:
-        if vista_seleccionada == "Períodos de Corte (Días 10-25)":
+        if vista_seleccionada == "Períodos de Corte":
             st.metric("Total Puntadas Períodos Corte", f"{total_puntadas:,.0f}")
         else:
             st.metric("Total Puntadas Acumuladas", f"{total_puntadas:,.0f}")
@@ -998,6 +1004,10 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         else:
             st.metric("Tasa por 1000 puntadas", "$0.00")
     
+    # ✅ MOSTRAR DETALLE DE QUÉ PERÍODOS SE INCLUYEN
+    if vista_seleccionada == "Períodos de Corte" and not df_comisiones_filtrado.empty:
+        mostrar_detalle_periodos_incluidos(df_comisiones_filtrado)
+    
     # Mostrar tabla detallada
     st.write(f"**📋 Detalle de Comisiones ({vista_seleccionada}):**")
     
@@ -1007,14 +1017,12 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
     if not df_comisiones_filtrado.empty and columnas_disponibles:
         df_mostrar = df_comisiones_filtrado[columnas_disponibles].copy()
         
-        # ✅ CORREGIDO: Formatear para mostrar de manera segura
+        # Formatear para mostrar
         if 'FECHA' in df_mostrar.columns:
             try:
-                # Intentar formatear como fecha
                 if pd.api.types.is_datetime64_any_dtype(df_mostrar['FECHA']):
                     df_mostrar['FECHA'] = df_mostrar['FECHA'].dt.strftime('%Y-%m-%d')
                 else:
-                    # Si no es datetime, mostrar como está
                     df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
             except:
                 df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
@@ -1024,7 +1032,6 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         
         for col in numeric_columns:
             if col in df_mostrar.columns:
-                # Convertir a numérico primero
                 df_mostrar[col] = pd.to_numeric(df_mostrar[col], errors='coerce')
                 
                 if col == 'TOTAL_PUNTADAS':
@@ -1036,14 +1043,8 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         
         st.dataframe(df_mostrar, use_container_width=True)
         
-        # ✅ CORREGIDO: Preparar datos para descarga
+        # Descargar
         df_descarga = df_comisiones_filtrado[columnas_disponibles].copy()
-        
-        # Asegurar que las columnas numéricas sean numéricas para la descarga
-        for col in ['TOTAL_PUNTADAS', 'COMISION', 'BONIFICACION', 'COMISION_TOTAL']:
-            if col in df_descarga.columns:
-                df_descarga[col] = pd.to_numeric(df_descarga[col], errors='coerce')
-        
         csv_data = df_descarga.to_csv(index=False, encoding='utf-8')
         st.download_button(
             label=f"📥 Descargar Comisiones ({vista_seleccionada})",
@@ -1053,6 +1054,85 @@ def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
         )
     else:
         st.warning("No hay datos de comisiones para mostrar con los filtros aplicados")
+
+def aplicar_filtro_periodos_simple(df):
+    """Filtro simplificado para períodos de corte - MÁS FÁCIL DE DEBUGGEAR"""
+    
+    df_filtrado = df.copy()
+    
+    # Extraer componentes de fecha
+    df_filtrado['DIA'] = df_filtrado['FECHA'].dt.day
+    df_filtrado['MES'] = df_filtrado['FECHA'].dt.month
+    df_filtrado['AÑO'] = df_filtrado['FECHA'].dt.year
+    
+    # ✅ FILTRO SIMPLIFICADO: Buscar registros que cumplan con los patrones de períodos
+    
+    # Lista para máscaras
+    mascaras = []
+    
+    # Para cada registro, determinar si está en algún período de corte
+    for idx, fila in df_filtrado.iterrows():
+        dia = fila['DIA']
+        mes = fila['MES']
+        año = fila['AÑO']
+        
+        # PERÍODO 2: Días 11-25 del mes actual
+        if 11 <= dia <= 25:
+            mascaras.append(True)
+            continue
+        
+        # PERÍODO 1: Puede ser en dos partes:
+        # Parte A: Días 1-10 del mes actual (viene del período que empezó el 26 del mes anterior)
+        if 1 <= dia <= 10:
+            mascaras.append(True)
+            continue
+        
+        # Parte B: Días 26-31/fin del mes anterior (pertenece al período 1 del mes actual)
+        if dia >= 26:
+            # Este registro pertenece al período 1 del mes SIGUIENTE
+            mascaras.append(True)
+            continue
+        
+        # Si no cumple ninguno, no incluir
+        mascaras.append(False)
+    
+    # Aplicar máscara
+    if mascaras:
+        df_filtrado = df_filtrado[mascaras]
+    
+    return df_filtrado
+
+def mostrar_detalle_periodos_incluidos(df_filtrado):
+    """Mostrar exactamente qué períodos están incluidos en el filtro"""
+    
+    st.subheader("📅 Períodos de Corte Incluidos")
+    
+    # Crear columna de período
+    df_periodos = df_filtrado.copy()
+    df_periodos['PERIODO_CORTE'] = df_periodos.apply(obtener_periodo_corte, axis=1)
+    
+    # Agrupar por período
+    resumen = df_periodos.groupby('PERIODO_CORTE').agg({
+        'FECHA': ['min', 'max', 'count'],
+        'TOTAL_PUNTADAS': 'sum'
+    }).reset_index()
+    
+    # Aplanar columnas
+    resumen.columns = ['Periodo', 'Fecha_Min', 'Fecha_Max', 'Registros', 'Total_Puntadas']
+    
+    # Ordenar por fecha
+    resumen = resumen.sort_values('Fecha_Min')
+    
+    # Formatear
+    resumen['Fecha_Min'] = resumen['Fecha_Min'].dt.strftime('%Y-%m-%d')
+    resumen['Fecha_Max'] = resumen['Fecha_Max'].dt.strftime('%Y-%m-%d')
+    resumen['Total_Puntadas'] = resumen['Total_Puntadas'].apply(lambda x: f"{x:,.0f}")
+    
+    st.dataframe(resumen, use_container_width=True)
+    
+    # Mostrar total general del período
+    total_general = df_periodos['TOTAL_PUNTADAS'].sum()
+    st.success(f"**Total general en períodos de corte: {total_general:,.0f} puntadas**")
 
 # ✅ TAMBIÉN CORREGIR LA FUNCIÓN DE CARGA DE DATOS
 def cargar_resumen_ejecutivo():
@@ -1673,3 +1753,41 @@ def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
         # ✅ ACTUALIZADO: Consulta para operadores INCLUYENDO COMISIONES
         st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
         mostrar_consultas_operadores(df_calculado, df_resumen)
+
+def obtener_periodo_corte(fila):
+    """Determinar a qué período de corte pertenece una fecha"""
+    
+    fecha = fila['FECHA']
+    dia = fecha.day
+    mes = fecha.month
+    año = fecha.year
+    
+    # PERÍODO 2: Días 11-25
+    if 11 <= dia <= 25:
+        return f"P2 {mes}/{año}"
+    
+    # PERÍODO 1 - Parte A: Días 1-10 (pertenece al período que empezó el mes anterior)
+    if 1 <= dia <= 10:
+        # Determinar mes anterior
+        if mes == 1:
+            mes_anterior = 12
+            año_anterior = año - 1
+        else:
+            mes_anterior = mes - 1
+            año_anterior = año
+        
+        return f"P1 {mes}/{año} (inició {mes_anterior}/{año_anterior})"
+    
+    # PERÍODO 1 - Parte B: Días 26-31 (pertenece al período del mes siguiente)
+    if dia >= 26:
+        # Determinar mes siguiente
+        if mes == 12:
+            mes_siguiente = 1
+            año_siguiente = año + 1
+        else:
+            mes_siguiente = mes + 1
+            año_siguiente = año
+        
+        return f"P1 {mes_siguiente}/{año_siguiente} (inició {mes}/{año})"
+    
+    return "Fuera de período"
