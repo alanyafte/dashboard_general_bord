@@ -427,7 +427,7 @@ def cargar_y_calcular_datos():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # ✅ DASHBOARD PRINCIPAL OPTIMIZADO CON TODOS LOS GRÁFICOS
-def mostrar_dashboard_produccion(df, df_calculado=None):
+def mostrar_dashboard_compacto(df, df_calculado=None):
     """Dashboard principal compacto pero con TODOS los gráficos"""
     
     # 1. MÉTRICAS PRINCIPALES
@@ -709,53 +709,3 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
         st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
     with col3:
         st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
-    
-    # 2. GRÁFICO DE EVOLUCIÓN (en expander)
-    with st.expander("📈 Ver evolución de puntadas", expanded=False):
-        if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
-            puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
-            puntadas_por_fecha = puntadas_por_fecha.sort_values("FECHA")
-            
-            fig = px.line(
-                puntadas_por_fecha,
-                x="FECHA",
-                y="TOTAL_PUNTADAS",
-                title=f"Puntadas de {operador_seleccionado} por Fecha",
-                markers=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
-    
-    # 3. DETALLE DE PEDIDOS
-    st.subheader("📋 Detalle de Pedidos")
-    columnas_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 'TOTAL_PUNTADAS']
-    columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
-    
-    df_mostrar = df_operador[columnas_disponibles].copy()
-    
-    # Formatear para mostrar
-    if 'FECHA' in df_mostrar.columns:
-        df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
-    
-    if 'TOTAL_PUNTADAS' in df_mostrar.columns:
-        df_mostrar['TOTAL_PUNTADAS'] = df_mostrar['TOTAL_PUNTADAS'].apply(lambda x: f"{x:,.0f}")
-    
-    if 'CANTIDAD' in df_mostrar.columns:
-        df_mostrar['CANTIDAD'] = df_mostrar['CANTIDAD'].apply(lambda x: f"{x:,.0f}")
-    
-    st.dataframe(df_mostrar, use_container_width=True)
-    
-    # 4. COMISIONES SIMPLIFICADAS
-    mostrar_comisiones_simplificadas(df_resumen, operador_seleccionado)
-
-def mostrar_comisiones_simplificadas(df_resumen, operador_seleccionado):
-    """Comisiones en formato simplificado"""
-    
-    if df_resumen is None or df_resumen.empty:
-        return
-    
-    df_comisiones = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
-    
-    if df_comisiones.empty:
-        st.info(f"💰 **Comisiones**: No hay comisiones registradas para **{operador_seleccionado}**.")
-        return
-    
