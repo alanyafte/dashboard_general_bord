@@ -163,10 +163,195 @@ def calcular_puntadas_automaticamente(df):
                 'PUNTADAS_MULTIPLOS': puntadas_multiplos,
                 'PUNTADAS_CAMBIOS': puntadas_cambios,
                 'TOTAL_PUNTADAS': total_puntadas,
-                'FECHA_CALCULO': datetime.now().date()
+                'FECHA_CALCULO': datetime.now().date(),
+                'HORA_CALCULO': datetime.now().strftime("%H:%M:%S")
             })
     
     return pd.DataFrame(resultados)
+
+# ✅ FUNCIONES DE GUARDADO EN SHEETS
+def guardar_calculos_en_sheets(df_calculado):
+    """Guardar los cálculos en una nueva hoja de Google Sheets"""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        spreadsheet = gc.open_by_key(sheet_id)
+        
+        # Intentar acceder a la hoja de cálculos, o crearla si no existe
+        try:
+            worksheet = spreadsheet.worksheet("puntadas_calculadas")
+        except:
+            worksheet = spreadsheet.add_worksheet(title="puntadas_calculadas", rows="1000", cols="20")
+        
+        # Limpiar la hoja existente
+        worksheet.clear()
+        
+        # CONVERTIR FECHAS A STRING ANTES DE GUARDAR
+        df_para_guardar = df_calculado.copy()
+        
+        # Convertir columnas de fecha a string
+        date_columns = ['FECHA', 'FECHA_CALCULO']
+        for col in date_columns:
+            if col in df_para_guardar.columns:
+                df_para_guardar[col] = df_para_guardar[col].astype(str)
+        
+        # Convertir DataFrame a lista de listas
+        datos_para_guardar = [df_para_guardar.columns.tolist()] + df_para_guardar.values.tolist()
+        
+        # Escribir todos los datos
+        worksheet.update('A1', datos_para_guardar)
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al guardar cálculos: {str(e)}")
+        return False
+
+def crear_hoja_resumen_ejecutivo():
+    """Crear la hoja de resumen ejecutivo si no existe"""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        spreadsheet = gc.open_by_key(sheet_id)
+        
+        # Intentar acceder a la hoja de resumen ejecutivo, o crearla si no existe
+        try:
+            worksheet = spreadsheet.worksheet("resumen_ejecutivo")
+        except:
+            worksheet = spreadsheet.add_worksheet(title="resumen_ejecutivo", rows="1000", cols="10")
+            
+            # Crear encabezados
+            encabezados = [
+                "FECHA", 
+                "OPERADOR", 
+                "TOTAL_PUNTADAS", 
+                "COMISION", 
+                "BONIFICACION", 
+                "COMISION_TOTAL",
+                "FECHA_ACTUALIZACION",
+                "ACTUALIZADO_POR"
+            ]
+            worksheet.update('A1', [encabezados])
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al crear hoja de resumen ejecutivo: {str(e)}")
+        return False
+
+def guardar_resumen_ejecutivo(df_calculado):
+    """Guardar resumen ejecutivo automáticamente en Google Sheets"""
+    try:
+        if df_calculado.empty:
+            return False
+            
+        # Crear hoja si no existe
+        crear_hoja_resumen_ejecutivo()
+        
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        
+        service_account_info = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"],
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        gc = gspread.authorize(creds)
+        
+        sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
+        spreadsheet = gc.open_by_key(sheet_id)
+        worksheet = spreadsheet.worksheet("resumen_ejecutivo")
+        
+        # Obtener datos existentes
+        try:
+            datos_existentes = worksheet.get_all_values()
+            if len(datos_existentes) > 1:
+                df_existente = pd.DataFrame(datos_existentes[1:], columns=datos_existentes[0])
+            else:
+                df_existente = pd.DataFrame()
+        except:
+            df_existente = pd.DataFrame()
+        
+        # Calcular resumen por operador y fecha
+        resumen = df_calculado.groupby(['OPERADOR', 'FECHA']).agg({
+            'TOTAL_PUNTADAS': 'sum'
+        }).reset_index()
+        
+        # Preparar datos para guardar
+        nuevos_registros = []
+        for _, fila in resumen.iterrows():
+            operador = fila['OPERADOR']
+            fecha = fila['FECHA']
+            total_puntadas = fila['TOTAL_PUNTADAS']
+            
+            # Verificar si ya existe este registro
+            existe = False
+            if not df_existente.empty:
+                mask = (df_existente['OPERADOR'] == operador) & (df_existente['FECHA'] == str(fecha))
+                existe = not df_existente[mask].empty
+            
+            # Solo agregar si no existe
+            if not existe:
+                nuevos_registros.append([
+                    str(fecha),
+                    operador,
+                    total_puntadas,
+                    "",  # COMISION (vacío para que lo llene el encargado)
+                    "",  # BONIFICACION (vacío)
+                    "",  # COMISION_TOTAL (vacío)
+                    "",  # FECHA_ACTUALIZACION (vacío)
+                    ""   # ACTUALIZADO_POR (vacío)
+                ])
+        
+        # Agregar nuevos registros
+        if nuevos_registros:
+            # Encontrar la última fila con datos
+            if datos_existentes:
+                ultima_fila = len(datos_existentes) + 1
+            else:
+                ultima_fila = 2  # Después de los encabezados
+            
+            # Escribir nuevos registros
+            worksheet.update(f'A{ultima_fila}', nuevos_registros)
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al guardar resumen ejecutivo: {str(e)}")
+        return False
 
 def cargar_y_calcular_datos():
     """Cargar y calcular datos desde Google Sheets"""
@@ -198,6 +383,15 @@ def cargar_y_calcular_datos():
         
         # CALCULAR PUNTADAS AUTOMÁTICAMENTE
         df_calculado = calcular_puntadas_automaticamente(df)
+        
+        # ✅ GUARDAR CÁLCULOS EN SHEETS (si hay datos)
+        if not df_calculado.empty:
+            try:
+                guardar_calculos_en_sheets(df_calculado)
+                # ✅ GUARDAR RESUMEN EJECUTIVO AUTOMÁTICAMENTE
+                guardar_resumen_ejecutivo(df_calculado)
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ No se pudieron guardar los cálculos: {e}")
         
         # CARGAR RESUMEN EJECUTIVO
         try:
@@ -565,113 +759,3 @@ def mostrar_comisiones_simplificadas(df_resumen, operador_seleccionado):
         st.info(f"💰 **Comisiones**: No hay comisiones registradas para **{operador_seleccionado}**.")
         return
     
-    st.subheader("💰 Comisiones y Bonificaciones")
-    
-    # Selector simple
-    vista_seleccionada = st.radio(
-        "Tipo de vista:",
-        ["Todo el Historial", "Períodos de Corte"],
-        horizontal=True
-    )
-    
-    # Aplicar filtro básico
-    if vista_seleccionada == "Períodos de Corte" and 'FECHA' in df_comisiones.columns:
-        try:
-            if df_comisiones['FECHA'].dtype == 'object':
-                df_comisiones['FECHA'] = pd.to_datetime(df_comisiones['FECHA'], errors='coerce')
-            
-            if pd.api.types.is_datetime64_any_dtype(df_comisiones['FECHA']):
-                df_comisiones['DIA'] = df_comisiones['FECHA'].dt.day
-                df_comisiones = df_comisiones[
-                    ((df_comisiones['DIA'] >= 1) & (df_comisiones['DIA'] <= 10)) |
-                    ((df_comisiones['DIA'] >= 11) & (df_comisiones['DIA'] <= 25))
-                ]
-        except:
-            pass
-    
-    # Métricas principales
-    total_comision = 0
-    total_puntadas = 0
-    
-    if not df_comisiones.empty:
-        if 'COMISION_TOTAL' in df_comisiones.columns:
-            total_comision = pd.to_numeric(df_comisiones['COMISION_TOTAL'], errors='coerce').sum()
-        if 'TOTAL_PUNTADAS' in df_comisiones.columns:
-            total_puntadas = pd.to_numeric(df_comisiones['TOTAL_PUNTADAS'], errors='coerce').sum()
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
-    with col2:
-        st.metric("Total Comisión", f"${total_comision:,.2f}" if total_comision > 0 else "Por calcular")
-    with col3:
-        if total_puntadas > 0 and total_comision > 0:
-            tasa_comision = (total_comision / total_puntadas) * 1000
-            st.metric("Tasa por 1000 puntadas", f"${tasa_comision:.2f}")
-    
-    # Tabla simplificada
-    columnas_comisiones = ['FECHA', 'TOTAL_PUNTADAS', 'COMISION_TOTAL']
-    columnas_disponibles = [col for col in columnas_comisiones if col in df_comisiones.columns]
-    
-    if columnas_disponibles:
-        df_mostrar = df_comisiones[columnas_disponibles].copy()
-        
-        if 'FECHA' in df_mostrar.columns:
-            df_mostrar['FECHA'] = df_mostrar['FECHA'].dt.strftime('%Y-%m-%d')
-        
-        if 'TOTAL_PUNTADAS' in df_mostrar.columns:
-            df_mostrar['TOTAL_PUNTADAS'] = df_mostrar['TOTAL_PUNTADAS'].apply(lambda x: f"{x:,.0f}")
-        
-        if 'COMISION_TOTAL' in df_mostrar.columns:
-            df_mostrar['COMISION_TOTAL'] = df_mostrar['COMISION_TOTAL'].apply(
-                lambda x: f"${x:,.2f}" if pd.notna(x) and x != 0 else "Por calcular"
-            )
-        
-        st.dataframe(df_mostrar, use_container_width=True)
-
-# ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO
-def mostrar_dashboard_produccion():
-    """Función principal que se llama desde app_principal.py"""
-    try:
-        # Botón de actualización
-        st.sidebar.header("🔄 Actualizar Datos")
-        if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        
-        # Cargar datos
-        df, df_calculado, df_resumen = cargar_y_calcular_datos()
-        
-        st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
-        st.sidebar.info(f"📊 Registros: {len(df)}")
-        if not df_calculado.empty:
-            st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
-        
-        # INTERFAZ OPTIMIZADA
-        mostrar_interfaz_optimizada(df, df_calculado, df_resumen)
-        
-    except Exception as e:
-        st.error(f"❌ Error al cargar los datos: {str(e)}")
-
-def mostrar_interfaz_optimizada(df, df_calculado=None, df_resumen=None):
-    """Interfaz principal optimizada del dashboard"""
-    
-    st.title("🏭 Dashboard de Producción")
-    
-    # Mostrar resumen rápido
-    st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
-    if df_calculado is not None and not df_calculado.empty:
-        st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
-    
-    # FILTROS
-    df_filtrado = aplicar_filtros(df)
-    
-    # PESTAÑAS PRINCIPALES OPTIMIZADAS
-    tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
-    
-    with tab1:
-        mostrar_dashboard_compacto(df_filtrado, df_calculado)
-    
-    with tab2:
-        st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
-        mostrar_consultas_operadores_compacto(df_calculado, df_resumen)
