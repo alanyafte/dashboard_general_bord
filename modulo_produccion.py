@@ -1791,3 +1791,89 @@ def obtener_periodo_corte(fila):
         return f"P1 {mes_siguiente}/{año_siguiente} (inició {mes}/{año})"
     
     return "Fuera de período"
+
+def mostrar_detalle_periodos_incluidos(df_filtrado):
+    """Mostrar exactamente qué períodos están incluidos en el filtro"""
+    
+    st.subheader("📅 Períodos de Corte Incluidos")
+    
+    # Crear columna de período
+    df_periodos = df_filtrado.copy()
+    df_periodos['PERIODO_CORTE'] = df_periodos.apply(obtener_periodo_corte, axis=1)
+    
+    # DEBUG: Verificar qué estamos obteniendo
+    st.sidebar.write("🔍 DEBUG - Períodos:")
+    st.sidebar.write(f"Columnas disponibles: {list(df_periodos.columns)}")
+    st.sidebar.write(f"Períodos únicos: {df_periodos['PERIODO_CORTE'].unique()}")
+    
+    # Agrupar por período
+    try:
+        resumen = df_periodos.groupby('PERIODO_CORTE').agg({
+            'FECHA': ['min', 'max', 'count'],
+            'TOTAL_PUNTADAS': 'sum'
+        }).reset_index()
+        
+        # Aplanar columnas
+        resumen.columns = ['Periodo', 'Fecha_Min', 'Fecha_Max', 'Registros', 'Total_Puntadas']
+        
+        # Ordenar por fecha
+        resumen = resumen.sort_values('Fecha_Min')
+        
+        # Formatear
+        resumen['Fecha_Min'] = resumen['Fecha_Min'].dt.strftime('%Y-%m-%d')
+        resumen['Fecha_Max'] = resumen['Fecha_Max'].dt.strftime('%Y-%m-%d')
+        resumen['Total_Puntadas'] = resumen['Total_Puntadas'].apply(lambda x: f"{x:,.0f}")
+        
+        st.dataframe(resumen, use_container_width=True)
+        
+        # Mostrar total general del período
+        total_general = df_periodos['TOTAL_PUNTADAS'].sum()
+        st.success(f"**Total general en períodos de corte: {total_general:,.0f} puntadas**")
+        
+    except Exception as e:
+        st.error(f"Error al generar resumen de períodos: {str(e)}")
+        # Mostrar datos crudos para debug
+        st.write("**Datos crudos para debug:**")
+        st.dataframe(df_periodos[['FECHA', 'TOTAL_PUNTADAS', 'PERIODO_CORTE']].head(), use_container_width=True)
+
+def obtener_periodo_corte(fila):
+    """Determinar a qué período de corte pertenece una fecha"""
+    
+    try:
+        fecha = fila['FECHA']
+        dia = fecha.day
+        mes = fecha.month
+        año = fecha.year
+        
+        # PERÍODO 2: Días 11-25
+        if 11 <= dia <= 25:
+            return f"P2 {mes}/{año}"
+        
+        # PERÍODO 1 - Parte A: Días 1-10 (pertenece al período que empezó el mes anterior)
+        if 1 <= dia <= 10:
+            # Determinar mes anterior
+            if mes == 1:
+                mes_anterior = 12
+                año_anterior = año - 1
+            else:
+                mes_anterior = mes - 1
+                año_anterior = año
+            
+            return f"P1 {mes}/{año} (inició {mes_anterior}/{año_anterior})"
+        
+        # PERÍODO 1 - Parte B: Días 26-31 (pertenece al período del mes siguiente)
+        if dia >= 26:
+            # Determinar mes siguiente
+            if mes == 12:
+                mes_siguiente = 1
+                año_siguiente = año + 1
+            else:
+                mes_siguiente = mes + 1
+                año_siguiente = año
+            
+            return f"P1 {mes_siguiente}/{año_siguiente} (inició {mes}/{año})"
+        
+        return "Fuera de período"
+    
+    except Exception as e:
+        return f"Error: {str(e)}"
