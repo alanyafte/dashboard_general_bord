@@ -87,6 +87,6 @@ else:
 # Footer del sidebar
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Cerrar Todas las Sesiones"):
-    for modulo in CONTRASEÑAS_MODULOS.keys():
+    for modulo in HASHES_MODULOS.keys():
         st.session_state[f"acceso_{modulo}"] = False
     st.rerun()
