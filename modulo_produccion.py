@@ -426,96 +426,6 @@ def cargar_y_calcular_datos():
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO (CON PARÁMETROS)
-def mostrar_dashboard_produccion(df=None, df_calculado=None):
-    """Función principal que se llama desde app_principal.py - CON PARÁMETROS"""
-    try:
-        # Botón de actualización
-        st.sidebar.header("🔄 Actualizar Datos")
-        if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        
-        # Si no se pasan datos, cargarlos
-        if df is None:
-            df, df_calculado, df_resumen = cargar_y_calcular_datos()
-        else:
-            # Si se pasan datos, cargar solo el resumen
-            _, _, df_resumen = cargar_y_calcular_datos()
-        
-        st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
-        st.sidebar.info(f"📊 Registros: {len(df)}")
-        if df_calculado is not None and not df_calculado.empty:
-            st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
-        if df_resumen is not None and not df_resumen.empty:
-            st.sidebar.success(f"💰 Comisiones: {len(df_resumen)} registros")
-        
-        # INTERFAZ OPTIMIZADA
-        st.title("🏭 Dashboard de Producción")
-        
-        # Mostrar resumen rápido
-        st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
-        if df_calculado is not None and not df_calculado.empty:
-            st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
-        if df_resumen is not None and not df_resumen.empty:
-            st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
-        
-        # FILTROS
-        df_filtrado = aplicar_filtros(df)
-        
-        # PESTAÑAS PRINCIPALES OPTIMIZADAS
-        tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
-        
-        with tab1:
-            # DASHBOARD PRINCIPAL DIRECTAMENTE AQUÍ
-            st.subheader("📈 Métricas de Producción")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total_pedidos = len(df_filtrado)
-                st.metric("Total Pedidos", f"{total_pedidos:,}")
-            
-            with col2:
-                if "CANTIDAD" in df_filtrado.columns:
-                    total_unidades = df_filtrado["CANTIDAD"].sum()
-                    st.metric("Total Unidades", f"{total_unidades:,}")
-                else:
-                    st.metric("Operadores Activos", df_filtrado["OPERADOR"].nunique())
-            
-            with col3:
-                if "OPERADOR" in df_filtrado.columns:
-                    operadores_activos = df_filtrado["OPERADOR"].nunique()
-                    st.metric("Operadores Activos", operadores_activos)
-            
-            with col4:
-                if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
-                    total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
-                    st.metric("Total Puntadas", f"{total_puntadas_calculadas:,.0f}")
-
-            # ANÁLISIS EN PESTAÑAS ORGANIZADAS
-            tab_ops, tab_puntadas, tab_trends, tab_data = st.tabs(["👥 Operadores", "🪡 Puntadas", "📈 Tendencias", "📋 Datos"])
-            
-            with tab_ops:
-                mostrar_analisis_operadores_completo(df_filtrado, df_calculado)
-            
-            with tab_puntadas:
-                mostrar_analisis_puntadas_completo(df_filtrado, df_calculado)
-            
-            with tab_trends:
-                mostrar_tendencias_completas(df_filtrado, df_calculado)
-            
-            with tab_data:
-                with st.expander("📊 Ver datos detallados de producción", expanded=False):
-                    st.dataframe(df_filtrado, use_container_width=True, height=400)
-        
-        with tab2:
-            st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
-            mostrar_consultas_operadores_compacto(df_calculado, df_resumen)
-        
-    except Exception as e:
-        st.error(f"❌ Error al cargar los datos: {str(e)}")
-        st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
-
 def mostrar_analisis_puntadas_completo(df, df_calculado=None):
     """Análisis completo de puntadas con todos los gráficos"""
     
@@ -698,3 +608,93 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
         st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
     with col3:
         st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
+
+# ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO (CON PARÁMETROS)
+def mostrar_dashboard_produccion(df=None, df_calculado=None):
+    """Función principal que se llama desde app_principal.py - CON PARÁMETROS"""
+    try:
+        # Botón de actualización
+        st.sidebar.header("🔄 Actualizar Datos")
+        if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+        
+        # Si no se pasan datos, cargarlos
+        if df is None:
+            df, df_calculado, df_resumen = cargar_y_calcular_datos()
+        else:
+            # Si se pasan datos, cargar solo el resumen
+            _, _, df_resumen = cargar_y_calcular_datos()
+        
+        st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
+        st.sidebar.info(f"📊 Registros: {len(df)}")
+        if df_calculado is not None and not df_calculado.empty:
+            st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
+        if df_resumen is not None and not df_resumen.empty:
+            st.sidebar.success(f"💰 Comisiones: {len(df_resumen)} registros")
+        
+        # INTERFAZ OPTIMIZADA
+        st.title("🏭 Dashboard de Producción")
+        
+        # Mostrar resumen rápido
+        st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
+        if df_calculado is not None and not df_calculado.empty:
+            st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
+        if df_resumen is not None and not df_resumen.empty:
+            st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
+        
+        # FILTROS
+        df_filtrado = aplicar_filtros(df)
+        
+        # PESTAÑAS PRINCIPALES OPTIMIZADAS
+        tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
+        
+        with tab1:
+            # DASHBOARD PRINCIPAL DIRECTAMENTE AQUÍ
+            st.subheader("📈 Métricas de Producción")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                total_pedidos = len(df_filtrado)
+                st.metric("Total Pedidos", f"{total_pedidos:,}")
+            
+            with col2:
+                if "CANTIDAD" in df_filtrado.columns:
+                    total_unidades = df_filtrado["CANTIDAD"].sum()
+                    st.metric("Total Unidades", f"{total_unidades:,}")
+                else:
+                    st.metric("Operadores Activos", df_filtrado["OPERADOR"].nunique())
+            
+            with col3:
+                if "OPERADOR" in df_filtrado.columns:
+                    operadores_activos = df_filtrado["OPERADOR"].nunique()
+                    st.metric("Operadores Activos", operadores_activos)
+            
+            with col4:
+                if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+                    total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
+                    st.metric("Total Puntadas", f"{total_puntadas_calculadas:,.0f}")
+
+            # ANÁLISIS EN PESTAÑAS ORGANIZADAS
+            tab_ops, tab_puntadas, tab_trends, tab_data = st.tabs(["👥 Operadores", "🪡 Puntadas", "📈 Tendencias", "📋 Datos"])
+            
+            with tab_ops:
+                mostrar_analisis_operadores_completo(df_filtrado, df_calculado)
+            
+            with tab_puntadas:
+                mostrar_analisis_puntadas_completo(df_filtrado, df_calculado)
+            
+            with tab_trends:
+                mostrar_tendencias_completas(df_filtrado, df_calculado)
+            
+            with tab_data:
+                with st.expander("📊 Ver datos detallados de producción", expanded=False):
+                    st.dataframe(df_filtrado, use_container_width=True, height=400)
+        
+        with tab2:
+            st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
+            mostrar_consultas_operadores_compacto(df_calculado, df_resumen)
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar los datos: {str(e)}")
+        st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
