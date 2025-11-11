@@ -654,7 +654,6 @@ def mostrar_analisis_operadores_completo(df_filtrado, df_calculado):
     except Exception as e:
         st.error(f"Error en análisis de operadores: {str(e)}")
 
-# ✅ CONSULTA DE OPERADORES OPTIMIZADA
 def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
     """Interfaz compacta para consulta de operadores"""
     
@@ -700,6 +699,115 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
         st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
     with col3:
         st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
+
+    # 2. RESUMEN DE COMISIONES - ✅ NUEVA SECCIÓN
+    st.subheader(f"💰 Comisiones de {operador_seleccionado}")
+    
+    if df_resumen is not None and not df_resumen.empty:
+        # Filtrar comisiones del operador seleccionado
+        if 'OPERADOR' in df_resumen.columns:
+            df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+            
+            if not df_comisiones_operador.empty:
+                # Mostrar métricas de comisiones
+                col4, col5, col6 = st.columns(3)
+                
+                with col4:
+                    if 'COMISION' in df_comisiones_operador.columns:
+                        comision_total = df_comisiones_operador['COMISION'].sum()
+                        st.metric("Comisión Total", f"${comision_total:,.2f}")
+                    else:
+                        st.metric("Registros Comisiones", len(df_comisiones_operador))
+                
+                with col5:
+                    if 'BONIFICACION' in df_comisiones_operador.columns:
+                        bonificacion_total = df_comisiones_operador['BONIFICACION'].sum()
+                        st.metric("Bonificación Total", f"${bonificacion_total:,.2f}")
+                    else:
+                        st.metric("Períodos", df_comisiones_operador['FECHA'].nunique())
+                
+                with col6:
+                    if 'COMISION_TOTAL' in df_comisiones_operador.columns:
+                        comision_final = df_comisiones_operador['COMISION_TOTAL'].sum()
+                        st.metric("Total a Pagar", f"${comision_final:,.2f}")
+                    else:
+                        st.info("Calculando...")
+                
+                # Mostrar tabla detallada de comisiones
+                with st.expander("📋 Ver detalle de comisiones", expanded=True):
+                    st.dataframe(df_comisiones_operador, use_container_width=True)
+                    
+                    # Botón para descargar comisiones
+                    csv = df_comisiones_operador.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Descargar mis comisiones (CSV)",
+                        data=csv,
+                        file_name=f"comisiones_{operador_seleccionado}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+            else:
+                st.info(f"📝 No hay registros de comisiones para {operador_seleccionado} en el resumen ejecutivo.")
+                st.info("Las comisiones se actualizan periódicamente por el administrador.")
+        else:
+            st.warning("⚠️ La estructura del resumen de comisiones no es válida.")
+    else:
+        st.info("💡 **Información sobre comisiones:**")
+        st.info("""
+        - Las comisiones se calculan basándose en tus puntadas totales
+        - El resumen ejecutivo se actualiza periódicamente
+        - Contacta al administrador para conocer los detalles de cálculo
+        - Tus puntadas calculadas: **{:,}** (base para comisiones)
+        """.format(total_puntadas))
+
+    # 3. DETALLE DE PUNTADAS POR PEDIDO
+    st.subheader(f"🪡 Detalle de Puntadas por Pedido")
+    
+    with st.expander("📊 Ver mis puntadas detalladas", expanded=False):
+        # Mostrar columnas relevantes del cálculo
+        columnas_a_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
+                             'PUNTADAS_BASE', 'CABEZAS', 'TOTAL_PUNTADAS']
+        
+        # Filtrar solo las columnas que existen
+        columnas_existentes = [col for col in columnas_a_mostrar if col in df_operador.columns]
+        
+        if columnas_existentes:
+            st.dataframe(df_operador[columnas_existentes], use_container_width=True)
+            
+            # Botón para descargar puntadas
+            csv_puntadas = df_operador[columnas_existentes].to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar mis puntadas (CSV)",
+                data=csv_puntadas,
+                file_name=f"puntadas_{operador_seleccionado}_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.dataframe(df_operador, use_container_width=True)
+
+    # 4. GRÁFICO DE PUNTADAS POR FECHA
+    if 'FECHA' in df_operador.columns and 'TOTAL_PUNTADAS' in df_operador.columns:
+        st.subheader("📈 Evolución de Mis Puntadas")
+        
+        try:
+            # Agrupar por fecha
+            puntadas_por_fecha = df_operador.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
+            
+            if len(puntadas_por_fecha) > 1:
+                # Crear gráfico
+                fig = px.line(
+                    puntadas_por_fecha, 
+                    x='FECHA', 
+                    y='TOTAL_PUNTADAS',
+                    title=f"Evolución de Puntadas - {operador_seleccionado}",
+                    markers=True
+                )
+                fig.update_layout(xaxis_title="Fecha", yaxis_title="Total Puntadas")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Se necesitan datos de múltiples fechas para mostrar la evolución.")
+                
+        except Exception as e:
+            st.warning(f"No se pudo generar el gráfico de evolución: {e}")
 
 # ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO (CON PARÁMETROS)
 def mostrar_dashboard_produccion(df=None, df_calculado=None):
