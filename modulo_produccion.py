@@ -654,7 +654,68 @@ def mostrar_analisis_operadores_completo(df_filtrado, df_calculado):
     except Exception as e:
         st.error(f"Error en análisis de operadores: {str(e)}")
 
-
+def agrupar_comisiones_por_periodo(df_comisiones):
+    """Agrupar comisiones por períodos quincenales (días 10 y 25) - VERSIÓN DEBUG"""
+    try:
+        st.write("🔍 **DEBUG agrupar_comisiones_por_periodo:**")
+        st.write(f"- Datos recibidos: {len(df_comisiones)} filas")
+        st.write(f"- Columnas: {df_comisiones.columns.tolist()}")
+        
+        if df_comisiones.empty:
+            st.write("❌ DataFrame vacío")
+            return pd.DataFrame()
+        
+        # Asegurarse de que FECHA es datetime
+        if df_comisiones['FECHA'].dtype == 'object':
+            st.write("🔄 Convirtiendo FECHA de string a datetime")
+            df_comisiones['FECHA'] = pd.to_datetime(df_comisiones['FECHA'], errors='coerce')
+        
+        # Verificar fechas válidas
+        fechas_invalidas = df_comisiones['FECHA'].isna().sum()
+        if fechas_invalidas > 0:
+            st.write(f"⚠️ {fechas_invalidas} fechas inválidas")
+        
+        # Eliminar filas con fechas inválidas
+        df_comisiones = df_comisiones.dropna(subset=['FECHA'])
+        st.write(f"✅ Fechas válidas: {len(df_comisiones)} filas")
+        
+        # Función para determinar el período
+        def obtener_periodo(fecha):
+            dia = fecha.day
+            if dia <= 15:
+                return fecha.replace(day=10).strftime('%d/%m/%Y')
+            else:
+                return fecha.replace(day=25).strftime('%d/%m/%Y')
+        
+        # Aplicar la función para crear columna de período
+        df_comisiones['PERIODO'] = df_comisiones['FECHA'].apply(obtener_periodo)
+        st.write("✅ Períodos calculados")
+        
+        # Verificar columnas numéricas disponibles
+        columnas_suma = ['COMISION', 'BONIFICACION', 'COMISION_TOTAL']
+        columnas_existentes = [col for col in columnas_suma if col in df_comisiones.columns]
+        st.write(f"🔍 Columnas numéricas encontradas: {columnas_existentes}")
+        
+        if columnas_existentes:
+            # Agrupar por período
+            df_agrupado = df_comisiones.groupby('PERIODO', as_index=False)[columnas_existentes].sum()
+            st.write(f"✅ Datos agrupados: {len(df_agrupado)} períodos")
+            
+            if not df_agrupado.empty:
+                # Ordenar por período
+                df_agrupado['PERIODO_DT'] = pd.to_datetime(df_agrupado['PERIODO'], format='%d/%m/%Y')
+                df_agrupado = df_agrupado.sort_values('PERIODO_DT', ascending=False)
+                df_agrupado = df_agrupado.drop('PERIODO_DT', axis=1)
+                st.write("✅ Períodos ordenados")
+            
+            return df_agrupado
+        else:
+            st.write("❌ No hay columnas numéricas para sumar")
+            return pd.DataFrame()
+            
+    except Exception as e:
+        st.error(f"❌ Error al agrupar comisiones por período: {str(e)}")
+        return pd.DataFrame()
 
 def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
     """Interfaz compacta para consulta de operadores con agrupación por períodos"""
