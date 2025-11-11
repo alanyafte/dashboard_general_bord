@@ -562,6 +562,98 @@ def mostrar_tendencias_completas(df, df_calculado=None):
     except Exception as e:
         st.error(f"Error al generar tendencias: {str(e)}")
 
+def mostrar_analisis_operadores_completo(df_filtrado, df_calculado):
+    """Análisis completo de operadores"""
+    try:
+        st.subheader("👥 Rendimiento por Operador")
+        
+        if df_filtrado.empty:
+            st.warning("No hay datos para mostrar")
+            return
+        
+        # Métricas básicas de operadores
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_operadores = df_filtrado["OPERADOR"].nunique()
+            st.metric("Total Operadores", total_operadores)
+        
+        with col2:
+            if "CANTIDAD" in df_filtrado.columns:
+                promedio_unidades = df_filtrado.groupby("OPERADOR")["CANTIDAD"].sum().mean()
+                st.metric("Promedio Unidades/Operador", f"{promedio_unidades:.0f}")
+            else:
+                total_pedidos = len(df_filtrado)
+                st.metric("Total Pedidos", total_pedidos)
+        
+        with col3:
+            if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+                promedio_puntadas = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().mean()
+                st.metric("Promedio Puntadas/Operador", f"{promedio_puntadas:,.0f}")
+            else:
+                pedidos_por_operador = df_filtrado.groupby("OPERADOR").size().mean()
+                st.metric("Promedio Pedidos/Operador", f"{pedidos_por_operador:.1f}")
+        
+        # Gráficos de operadores
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Top operadores por cantidad de pedidos
+            operadores_pedidos = df_filtrado["OPERADOR"].value_counts().head(10)
+            if not operadores_pedidos.empty:
+                st.write("**📊 Top Operadores por Pedidos:**")
+                st.dataframe(operadores_pedidos.reset_index().rename(
+                    columns={"index": "Operador", "OPERADOR": "Total Pedidos"}
+                ), use_container_width=True)
+        
+        with col2:
+            # Top operadores por unidades producidas
+            if "CANTIDAD" in df_filtrado.columns:
+                operadores_unidades = df_filtrado.groupby("OPERADOR")["CANTIDAD"].sum().sort_values(ascending=False).head(10)
+                if not operadores_unidades.empty:
+                    st.write("**🏆 Top Operadores por Unidades:**")
+                    st.dataframe(operadores_unidades.reset_index().rename(
+                        columns={"CANTIDAD": "Total Unidades"}
+                    ), use_container_width=True)
+        
+        # Gráfico de distribución de operadores
+        st.write("**📈 Distribución de Operadores:**")
+        operadores_count = df_filtrado["OPERADOR"].value_counts().head(15)
+        
+        if not operadores_count.empty:
+            st.bar_chart(operadores_count)
+            
+        # Análisis de puntadas por operador si hay datos calculados
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            st.subheader("🧵 Puntadas por Operador")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                puntadas_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).head(10)
+                if not puntadas_operador.empty:
+                    st.write("**🏅 Top Operadores por Puntadas:**")
+                    st.dataframe(puntadas_operador.reset_index().rename(
+                        columns={"TOTAL_PUNTADAS": "Total Puntadas"}
+                    ), use_container_width=True)
+            
+            with col2:
+                # Eficiencia de operadores (puntadas por pedido)
+                eficiencia_operador = df_calculado.groupby("OPERADOR").agg({
+                    "TOTAL_PUNTADAS": ["sum", "mean"],
+                    "PEDIDO": "count"
+                }).round(0)
+                
+                eficiencia_operador.columns = ["Total_Puntadas", "Promedio_Puntadas", "Total_Pedidos"]
+                eficiencia_operador = eficiencia_operador.sort_values("Total_Puntadas", ascending=False).head(10)
+                
+                if not eficiencia_operador.empty:
+                    st.write("**📊 Eficiencia por Operador:**")
+                    st.dataframe(eficiencia_operador, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error en análisis de operadores: {str(e)}")
+
 # ✅ CONSULTA DE OPERADORES OPTIMIZADA
 def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
     """Interfaz compacta para consulta de operadores"""
