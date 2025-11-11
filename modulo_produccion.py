@@ -655,70 +655,148 @@ def mostrar_analisis_operadores_completo(df_filtrado, df_calculado):
         st.error(f"Error en análisis de operadores: {str(e)}")
 
 def agrupar_comisiones_por_periodo(df_comisiones):
-    """Agrupar comisiones por períodos quincenales (días 10 y 25) - VERSIÓN DEBUG"""
+    """Agrupar comisiones por períodos quincenales FIJOS (días 10 y 25 de cada mes)"""
     try:
-        st.write("🔍 **DEBUG agrupar_comisiones_por_periodo:**")
-        st.write(f"- Datos recibidos: {len(df_comisiones)} filas")
-        st.write(f"- Columnas: {df_comisiones.columns.tolist()}")
-        
         if df_comisiones.empty:
-            st.write("❌ DataFrame vacío")
             return pd.DataFrame()
         
         # Asegurarse de que FECHA es datetime
         if df_comisiones['FECHA'].dtype == 'object':
-            st.write("🔄 Convirtiendo FECHA de string a datetime")
             df_comisiones['FECHA'] = pd.to_datetime(df_comisiones['FECHA'], errors='coerce')
-        
-        # Verificar fechas válidas
-        fechas_invalidas = df_comisiones['FECHA'].isna().sum()
-        if fechas_invalidas > 0:
-            st.write(f"⚠️ {fechas_invalidas} fechas inválidas")
         
         # Eliminar filas con fechas inválidas
         df_comisiones = df_comisiones.dropna(subset=['FECHA'])
-        st.write(f"✅ Fechas válidas: {len(df_comisiones)} filas")
         
-        # Función para determinar el período
-        def obtener_periodo(fecha):
+        # Función para determinar el período FIJANDO días 10 y 25 como cortes
+        def obtener_periodo_fijo(fecha):
+            """
+            Asigna cada fecha a su período quincenal:
+            - Del día 11 al 25 -> Período con corte día 25
+            - Del día 26 al 10 -> Período con corte día 10
+            """
             dia = fecha.day
-            if dia <= 15:
-                return fecha.replace(day=10).strftime('%d/%m/%Y')
-            else:
-                return fecha.replace(day=25).strftime('%d/%m/%Y')
+            mes = fecha.month
+            año = fecha.year
+            
+            if 11 <= dia <= 25:
+                # Período: 11 al 25 del mismo mes (corte día 25)
+                return f"25/{mes:02d}/{año}"
+            elif dia >= 26:
+                # Período: 26 al último día del mes + 1 al 10 del mes siguiente (corte día 10)
+                mes_siguiente = mes + 1 if mes < 12 else 1
+                año_siguiente = año if mes < 12 else año + 1
+                return f"10/{mes_siguiente:02d}/{año_siguiente}"
+            else:  # dia <= 10
+                # Período: 26 del mes anterior al 10 del mes actual (corte día 10)
+                return f"10/{mes:02d}/{año}"
         
         # Aplicar la función para crear columna de período
-        df_comisiones['PERIODO'] = df_comisiones['FECHA'].apply(obtener_periodo)
-        st.write("✅ Períodos calculados")
+        df_comisiones['PERIODO'] = df_comisiones['FECHA'].apply(obtener_periodo_fijo)
         
-        # Verificar columnas numéricas disponibles
+        # Agrupar por período y calcular totales
         columnas_suma = ['COMISION', 'BONIFICACION', 'COMISION_TOTAL']
         columnas_existentes = [col for col in columnas_suma if col in df_comisiones.columns]
-        st.write(f"🔍 Columnas numéricas encontradas: {columnas_existentes}")
         
         if columnas_existentes:
-            # Agrupar por período
             df_agrupado = df_comisiones.groupby('PERIODO', as_index=False)[columnas_existentes].sum()
-            st.write(f"✅ Datos agrupados: {len(df_agrupado)} períodos")
             
-            if not df_agrupado.empty:
-                # Ordenar por período
-                df_agrupado['PERIODO_DT'] = pd.to_datetime(df_agrupado['PERIODO'], format='%d/%m/%Y')
-                df_agrupado = df_agrupado.sort_values('PERIODO_DT', ascending=False)
-                df_agrupado = df_agrupado.drop('PERIODO_DT', axis=1)
-                st.write("✅ Períodos ordenados")
+            # Ordenar por período (convertir a datetime para ordenar correctamente)
+            df_agrupado['PERIODO_DT'] = pd.to_datetime(df_agrupado['PERIODO'], format='%d/%m/%Y')
+            df_agrupado = df_agrupado.sort_values('PERIODO_DT', ascending=False)
+            df_agrupado = df_agrupado.drop('PERIODO_DT', axis=1)
             
             return df_agrupado
         else:
-            st.write("❌ No hay columnas numéricas para sumar")
             return pd.DataFrame()
             
     except Exception as e:
-        st.error(f"❌ Error al agrupar comisiones por período: {str(e)}")
+        st.error(f"Error al agrupar comisiones por período: {str(e)}")
         return pd.DataFrame()
 
+def comparar_puntadas_reales_vs_calculadas(df_calculado, df_resumen, operador_seleccionado):
+    """Comparar puntadas reales (comisiones) vs puntadas calculadas para análisis"""
+    
+    if df_calculado is None or df_calculado.empty:
+        return
+    
+    # Filtrar datos del operador en cálculos
+    df_operador_calc = df_calculado[df_calculado["OPERADOR"] == operador_seleccionado].copy()
+    
+    if df_operador_calc.empty:
+        return
+    
+    # Aplicar misma lógica de períodos a las puntadas calculadas
+    def obtener_periodo_fijo(fecha):
+        dia = fecha.day
+        mes = fecha.month
+        año = fecha.year
+        
+        if 11 <= dia <= 25:
+            return f"25/{mes:02d}/{año}"
+        elif dia >= 26:
+            mes_siguiente = mes + 1 if mes < 12 else 1
+            año_siguiente = año if mes < 12 else año + 1
+            return f"10/{mes_siguiente:02d}/{año_siguiente}"
+        else:
+            return f"10/{mes:02d}/{año}"
+    
+    # Agrupar puntadas calculadas por período
+    df_operador_calc['PERIODO'] = df_operador_calc['FECHA'].apply(obtener_periodo_fijo)
+    puntadas_por_periodo = df_operador_calc.groupby('PERIODO')['TOTAL_PUNTADAS'].sum().reset_index()
+    puntadas_por_periodo.columns = ['PERIODO', 'PUNTADAS_CALCULADAS']
+    
+    # Si hay comisiones, mostrar comparativa
+    if df_resumen is not None and not df_resumen.empty and 'OPERADOR' in df_resumen.columns:
+        df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+        
+        if not df_comisiones_operador.empty:
+            # Agrupar comisiones por período
+            df_comisiones_agrupadas = agrupar_comisiones_por_periodo(df_comisiones_operador)
+            
+            if not df_comisiones_agrupadas.empty:
+                # Combinar puntadas calculadas con comisiones
+                df_comparativa = pd.merge(
+                    puntadas_por_periodo, 
+                    df_comisiones_agrupadas, 
+                    on='PERIODO', 
+                    how='outer'
+                )
+                
+                # Solo mostrar si hay datos para comparar
+                if not df_comparativa.empty:
+                    st.subheader("📊 Comparativa: Puntadas vs Comisiones")
+                    st.info("""
+                    **Análisis de eficiencia:**
+                    - Compara tus **puntadas calculadas** vs **comisiones recibidas**
+                    - Ayuda a identificar si el sistema actual es adecuado
+                    - Base para posibles ajustes en el sistema de comisiones
+                    """)
+                    
+                    # Crear tabla comparativa
+                    df_display = df_comparativa.copy()
+                    
+                    # Formatear columnas numéricas
+                    if 'PUNTADAS_CALCULADAS' in df_display.columns:
+                        df_display['PUNTADAS_CALCULADAS'] = df_display['PUNTADAS_CALCULADAS'].apply(
+                            lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A"
+                        )
+                    
+                    if 'COMISION_TOTAL' in df_display.columns:
+                        df_display['COMISION_TOTAL'] = df_display['COMISION_TOTAL'].apply(
+                            lambda x: f"${x:,.2f}" if pd.notna(x) else "N/A"
+                        )
+                    
+                    st.dataframe(df_display, use_container_width=True)
+                    
+                    # Análisis simple
+                    periodos_con_datos = df_comparativa.dropna().shape[0]
+                    if periodos_con_datos > 0:
+                        st.success(f"✅ {periodos_con_datos} período(s) con datos completos para análisis")
+                    else:
+                        st.info("ℹ️ No hay períodos superpuestos para comparar aún")
+
 def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
-    """Interfaz compacta para consulta de operadores con agrupación por períodos"""
+    """Interfaz compacta para consulta de operadores - SOLO AGRUPACIÓN"""
     
     if df_calculado is None or df_calculado.empty:
         st.info("ℹ️ No hay cálculos disponibles. Los cálculos se generan automáticamente.")
@@ -763,104 +841,66 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
     with col3:
         st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
 
-    # 2. RESUMEN DE COMISIONES POR PERÍODOS
+    # 2. COMISIONES POR PERÍODOS (SOLO AGRUPACIÓN)
     st.subheader(f"💰 Comisiones por Períodos de {operador_seleccionado}")
     
-    if df_resumen is not None and not df_resumen.empty:
-        # Filtrar comisiones del operador seleccionado
-        if 'OPERADOR' in df_resumen.columns:
-            df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+    if df_resumen is not None and not df_resumen.empty and 'OPERADOR' in df_resumen.columns:
+        df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+        
+        if not df_comisiones_operador.empty:
+            df_comisiones_agrupadas = agrupar_comisiones_por_periodo(df_comisiones_operador)
             
-            if not df_comisiones_operador.empty:
-                # Convertir FECHA a datetime si es string
-                if df_comisiones_operador['FECHA'].dtype == 'object':
-                    df_comisiones_operador['FECHA'] = pd.to_datetime(df_comisiones_operador['FECHA'], errors='coerce')
+            if not df_comisiones_agrupadas.empty:
+                # Mostrar métricas de comisiones agrupadas
+                col4, col5, col6 = st.columns(3)
                 
-                # ✅ AGREGAR AQUÍ LA LÓGICA DE AGRUPACIÓN POR PERÍODOS
-                df_comisiones_agrupadas = agrupar_comisiones_por_periodo(df_comisiones_operador)
+                with col4:
+                    total_comision = df_comisiones_agrupadas['COMISION_TOTAL'].sum()
+                    st.metric("Total Acumulado", f"${total_comision:,.2f}")
                 
-                if not df_comisiones_agrupadas.empty:
-                    # Mostrar resumen por períodos
-                    st.success(f"**📅 Comisiones agrupadas por períodos quincenales**")
-                    
-                    # Métricas de comisiones agrupadas
-                    col4, col5, col6 = st.columns(3)
-                    
-                    with col4:
-                        total_comision = df_comisiones_agrupadas['COMISION_TOTAL'].sum()
-                        st.metric("Total Acumulado", f"${total_comision:,.2f}")
-                    
-                    with col5:
-                        periodos_count = len(df_comisiones_agrupadas)
-                        st.metric("Períodos Pagados", periodos_count)
-                    
-                    with col6:
-                        promedio_por_periodo = df_comisiones_agrupadas['COMISION_TOTAL'].mean()
-                        st.metric("Promedio por Período", f"${promedio_por_periodo:,.2f}")
-                    
-                    # Mostrar tabla de períodos
-                    st.write("**🗓️ Desglose por Períodos:**")
-                    
-                    # Formatear la tabla para mejor visualización
-                    df_display = df_comisiones_agrupadas.copy()
-                    df_display['PERIODO'] = df_display['PERIODO'].astype(str)
-                    df_display['COMISION'] = df_display['COMISION'].apply(lambda x: f"${x:,.2f}")
-                    df_display['BONIFICACION'] = df_display['BONIFICACION'].apply(lambda x: f"${x:,.2f}")
-                    df_display['COMISION_TOTAL'] = df_display['COMISION_TOTAL'].apply(lambda x: f"${x:,.2f}")
-                    
-                    st.dataframe(df_display[['PERIODO', 'COMISION', 'BONIFICACION', 'COMISION_TOTAL']], 
-                                use_container_width=True)
-                    
-                    # Gráfico de comisiones por período
-                    st.write("**📈 Evolución de Comisiones por Período:**")
-                    
-                    # Crear gráfico de barras
-                    fig = px.bar(
-                        df_comisiones_agrupadas,
-                        x='PERIODO',
-                        y='COMISION_TOTAL',
-                        title=f"Comisiones por Período - {operador_seleccionado}",
-                        labels={'COMISION_TOTAL': 'Comisión Total', 'PERIODO': 'Período'},
-                        color='COMISION_TOTAL',
-                        color_continuous_scale='viridis'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Botón para descargar comisiones agrupadas
-                    csv = df_comisiones_agrupadas.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Descargar mis comisiones por períodos (CSV)",
-                        data=csv,
-                        file_name=f"comisiones_periodos_{operador_seleccionado}_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.info("No hay datos agrupados por períodos disponibles.")
+                with col5:
+                    periodos_count = len(df_comisiones_agrupadas)
+                    st.metric("Períodos Pagados", periodos_count)
                 
-                # Mostrar tabla detallada original (expandible)
-                with st.expander("📋 Ver detalle completo de comisiones (sin agrupar)", expanded=False):
-                    st.dataframe(df_comisiones_operador, use_container_width=True)
-                    
+                with col6:
+                    promedio_por_periodo = df_comisiones_agrupadas['COMISION_TOTAL'].mean()
+                    st.metric("Promedio por Período", f"${promedio_por_periodo:,.2f}")
+                
+                # Mostrar tabla de períodos
+                st.write("**🗓️ Desglose por Períodos Quincenales:**")
+                
+                df_display = df_comisiones_agrupadas.copy()
+                df_display['COMISION'] = df_display['COMISION'].apply(lambda x: f"${x:,.2f}")
+                df_display['BONIFICACION'] = df_display['BONIFICACION'].apply(lambda x: f"${x:,.2f}")
+                df_display['COMISION_TOTAL'] = df_display['COMISION_TOTAL'].apply(lambda x: f"${x:,.2f}")
+                
+                st.dataframe(df_display, use_container_width=True)
+                
+                # Gráfico de comisiones por período
+                st.write("**📈 Evolución de Comisiones:**")
+                fig = px.bar(
+                    df_comisiones_agrupadas,
+                    x='PERIODO',
+                    y='COMISION_TOTAL',
+                    title=f"Comisiones por Período - {operador_seleccionado}",
+                    labels={'COMISION_TOTAL': 'Comisión Total', 'PERIODO': 'Período'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
             else:
-                st.info(f"📝 No hay registros de comisiones para {operador_seleccionado} en el resumen ejecutivo.")
-                st.info("Las comisiones se actualizan periódicamente por el administrador.")
+                st.info("No hay comisiones agrupadas por períodos.")
         else:
-            st.warning("⚠️ La estructura del resumen de comisiones no es válida.")
+            st.info(f"No hay registros de comisiones para {operador_seleccionado}.")
     else:
-        st.info("💡 **Información sobre comisiones:**")
-        st.info("""
-        - Las comisiones se calculan basándose en tus puntadas totales
-        - Los períodos de pago son quincenales (días 10 y 25 de cada mes)
-        - El resumen ejecutivo se actualiza periódicamente
-        - Contacta al administrador para conocer los detalles de cálculo
-        - Tus puntadas calculadas: **{:,}** (base para comisiones)
-        """.format(total_puntadas))
+        st.info("No hay datos de comisiones disponibles en el resumen ejecutivo.")
 
-    # 3. DETALLE DE PUNTADAS POR PEDIDO (se mantiene igual)
+    # 3. COMPARATIVA PUNTADAS VS COMISIONES (ANÁLISIS)
+    comparar_puntadas_reales_vs_calculadas(df_calculado, df_resumen, operador_seleccionado)
+
+    # 4. DETALLE DE PUNTADAS (se mantiene igual)
     st.subheader(f"🪡 Detalle de Puntadas por Pedido")
     
     with st.expander("📊 Ver mis puntadas detalladas", expanded=False):
-        # ... (el resto del código se mantiene igual)
         columnas_a_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
                              'PUNTADAS_BASE', 'CABEZAS', 'TOTAL_PUNTADAS']
         
@@ -868,14 +908,6 @@ def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
         
         if columnas_existentes:
             st.dataframe(df_operador[columnas_existentes], use_container_width=True)
-            
-            csv_puntadas = df_operador[columnas_existentes].to_csv(index=False)
-            st.download_button(
-                label="📥 Descargar mis puntadas (CSV)",
-                data=csv_puntadas,
-                file_name=f"puntadas_{operador_seleccionado}_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv"
-            )
         else:
             st.dataframe(df_operador, use_container_width=True)
 
