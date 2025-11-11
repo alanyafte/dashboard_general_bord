@@ -669,25 +669,17 @@ def agrupar_comisiones_por_periodo(df_comisiones):
         
         # Función para determinar el período FIJANDO días 10 y 25 como cortes
         def obtener_periodo_fijo(fecha):
-            """
-            Asigna cada fecha a su período quincenal:
-            - Del día 11 al 25 -> Período con corte día 25
-            - Del día 26 al 10 -> Período con corte día 10
-            """
             dia = fecha.day
             mes = fecha.month
             año = fecha.year
             
             if 11 <= dia <= 25:
-                # Período: 11 al 25 del mismo mes (corte día 25)
                 return f"25/{mes:02d}/{año}"
             elif dia >= 26:
-                # Período: 26 al último día del mes + 1 al 10 del mes siguiente (corte día 10)
                 mes_siguiente = mes + 1 if mes < 12 else 1
                 año_siguiente = año if mes < 12 else año + 1
                 return f"10/{mes_siguiente:02d}/{año_siguiente}"
-            else:  # dia <= 10
-                # Período: 26 del mes anterior al 10 del mes actual (corte día 10)
+            else:
                 return f"10/{mes:02d}/{año}"
         
         # Aplicar la función para crear columna de período
@@ -712,7 +704,7 @@ def agrupar_comisiones_por_periodo(df_comisiones):
     except Exception as e:
         st.error(f"Error al agrupar comisiones por período: {str(e)}")
         return pd.DataFrame()
-
+        
 def comparar_puntadas_reales_vs_calculadas(df_calculado, df_resumen, operador_seleccionado):
     """Comparar puntadas reales (comisiones) vs puntadas calculadas para análisis"""
     
