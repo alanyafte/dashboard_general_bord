@@ -997,10 +997,8 @@ def mostrar_dashboard_produccion(df=None, df_calculado=None):
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
 
         
-        with tab3:  
-            st.header("Inteligencia Artificial para Producción")
-            st.info("Análisis predictivo y automático de tus datos")
-            mostrar_plugins_ia(df_filtrado, df_calculado)
+       with tab3:
+            mostrar_ia_produccion(df_filtrado, df_calculado)
 
 # AL FINAL de modulo_produccion.py - SOLO ESTO:
 
