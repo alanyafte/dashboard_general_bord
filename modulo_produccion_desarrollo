@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 from datetime import timedelta
 
-# ✅ FUNCIONES DE LIMPIEZA Y ANÁLISIS (las que ya tenías)
+# ✅ FUNCIONES DE LIMPIEZA Y CÁLCULO (Backend)
 def limpiar_dataframe(df_raw):
     """Limpiar y procesar el dataframe"""
     df = df_raw.copy()
@@ -25,17 +25,15 @@ def limpiar_dataframe(df_raw):
     
     # Convertir Marca temporal a datetime
     if "Marca temporal" in df.columns:
-        df["Marca temporal"] = pd.to_datetime(df["Marca temporal"], errors='coerce')
+        df["Marca temporal"] = pd.to_datetime(df["Marca temporal"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
     
     # Convertir CANTIDAD a numérico
     if "CANTIDAD" in df.columns:
         df["CANTIDAD"] = pd.to_numeric(df["CANTIDAD"], errors='coerce')
     
-    # Convertir PUNTADAS a numérico (MUY IMPORTANTE para la suma)
+    # Convertir PUNTADAS a numérico
     if "PUNTADAS" in df.columns:
-        # Limpiar posibles textos o caracteres no numéricos
         df["PUNTADAS"] = pd.to_numeric(df["PUNTADAS"], errors='coerce')
-        # Eliminar NaN para evitar problemas en sumas
         df["PUNTADAS"] = df["PUNTADAS"].fillna(0)
     
     # Convertir MULTIPLOS a numérico (si existe)
@@ -48,7 +46,7 @@ def aplicar_filtros(df):
     """Aplicar filtros interactivos"""
     df_filtrado = df.copy()
     
-    st.sidebar.header("🔍 Filtros Avanzados")
+    st.sidebar.header("🔍 Filtros")
     
     # Filtro por OPERADOR
     if "OPERADOR" in df.columns:
@@ -61,11 +59,10 @@ def aplicar_filtros(df):
         if operadores_seleccionados:
             df_filtrado = df_filtrado[df_filtrado["OPERADOR"].isin(operadores_seleccionados)]
     
-    # ✅ CORREGIDO: Filtro por fecha (Marca temporal)
+    # Filtro por fecha
     if "Marca temporal" in df.columns and not df_filtrado["Marca temporal"].isna().all():
         fechas_disponibles = df_filtrado["Marca temporal"].dropna()
         if not fechas_disponibles.empty:
-            # Convertir a fecha sin hora para el date_input
             fecha_min = fechas_disponibles.min().to_pydatetime().date()
             fecha_max = fechas_disponibles.max().to_pydatetime().date()
             
@@ -76,324 +73,103 @@ def aplicar_filtros(df):
                 max_value=fecha_max
             )
             
-            # ✅ CORREGIDO: Verificar que se seleccionaron 2 fechas
             if len(rango_fechas) == 2:
                 fecha_inicio, fecha_fin = rango_fechas
-                # Convertir a datetime para comparación
                 fecha_inicio_dt = pd.to_datetime(fecha_inicio)
-                fecha_fin_dt = pd.to_datetime(fecha_fin) + timedelta(days=1)  # Incluir todo el día final
+                fecha_fin_dt = pd.to_datetime(fecha_fin) + timedelta(days=1)
                 
                 mask = (df_filtrado["Marca temporal"] >= fecha_inicio_dt) & \
                        (df_filtrado["Marca temporal"] < fecha_fin_dt)
                 df_filtrado = df_filtrado[mask]
     
-    # Filtro por TIPO DE PRENDA
-    if "TIPO DE PRENDA" in df.columns:
-        tipos_prenda = sorted(df_filtrado["TIPO DE PRENDA"].unique())
-        tipos_seleccionados = st.sidebar.multiselect(
-            "Tipo de Prenda:",
-            options=tipos_prenda,
-            default=tipos_prenda
-        )
-        if tipos_seleccionados:
-            df_filtrado = df_filtrado[df_filtrado["TIPO DE PRENDA"].isin(tipos_seleccionados)]
-    
-    # Filtro por DISEÑO
-    if "DISEÑO" in df.columns:
-        diseños = sorted(df_filtrado["DISEÑO"].unique())
-        diseños_seleccionados = st.sidebar.multiselect(
-            "Diseños:",
-            options=diseños,
-            default=diseños
-        )
-        if diseños_seleccionados:
-            df_filtrado = df_filtrado[df_filtrado["DISEÑO"].isin(diseños_seleccionados)]
-    
     st.sidebar.info(f"📊 Registros filtrados: {len(df_filtrado)}")
-    
     return df_filtrado
 
-# ✅ NUEVA FUNCIÓN: Métricas con cálculos automáticos
-def mostrar_metricas_principales(df, df_calculado=None):
-    """Mostrar métricas principales de producción INCLUYENDO CÁLCULOS AUTOMÁTICOS"""
+def calcular_puntadas_automaticamente(df):
+    """Calcular automáticamente las puntadas cuando se cargan los datos"""
     
-    if df.empty:
-        st.warning("No hay datos con los filtros aplicados")
-        return
+    CONFIG_MAQUINAS = {
+        "Susi": 6,
+        "Juan": 6,
+        "Esmeralda": 6,
+        "Rigoberto": 2,
+        "Maricela": 2,
+    }
     
-    st.subheader("📈 Métricas de Producción")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_pedidos = len(df)
-        st.metric("Total de Pedidos", f"{total_pedidos:,}")
-    
-    with col2:
-        if "CANTIDAD" in df.columns:
-            total_unidades = df["CANTIDAD"].sum()
-            st.metric("Total Unidades", f"{total_unidades:,}")
-        else:
-            st.metric("Operadores Activos", df["OPERADOR"].nunique())
-    
-    with col3:
-        if "OPERADOR" in df.columns:
-            operadores_activos = df["OPERADOR"].nunique()
-            st.metric("Operadores Activos", operadores_activos)
-        else:
-            st.metric("Diseños Únicos", df["DISEÑO"].nunique())
-    
-    with col4:
-        # ✅ MÉTRICA MEJORADA: Usar cálculos automáticos si están disponibles
-        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
-            total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
-            st.metric("Total Puntadas Calculadas", f"{total_puntadas_calculadas:,.0f}")
-        elif "PUNTADAS" in df.columns:
-            total_puntadas = df["PUNTADAS"].sum()
-            st.metric("Total Puntadas Base", f"{total_puntadas:,.0f}")
-        else:
-            st.metric("Pedidos Únicos", df["#DE PEDIDO"].nunique())
-
-# ✅ NUEVA FUNCIÓN: Análisis con cálculos automáticos
-def mostrar_analisis_puntadas_calculadas(df_calculado):
-    """Análisis específico de puntadas CALCULADAS"""
-    
-    if df_calculado is None or df_calculado.empty or "TOTAL_PUNTADAS" not in df_calculado.columns:
-        st.info("No hay cálculos de puntadas disponibles para mostrar.")
-        return
-    
-    st.subheader("🪡 Análisis de Puntadas Calculadas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top operadores por puntadas calculadas
-        puntadas_por_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).reset_index()
-        puntadas_por_operador.columns = ['Operador', 'Total Puntadas Calculadas']
-        
-        st.write("**🏆 Ranking por Puntadas Calculadas:**")
-        st.dataframe(puntadas_por_operador, use_container_width=True)
-    
-    with col2:
-        # Distribución de puntadas calculadas por tipo de prenda
-        if "TIPO_PRENDA" in df_calculado.columns:
-            puntadas_por_prenda = df_calculado.groupby("TIPO_PRENDA")["TOTAL_PUNTADAS"].sum().reset_index()
-            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas Calculadas']
-            
-            if len(puntadas_por_prenda) > 0:
-                fig = px.pie(
-                    puntadas_por_prenda, 
-                    values='Total Puntadas Calculadas', 
-                    names='Tipo de Prenda',
-                    title="Distribución de Puntadas Calculadas por Tipo de Prenda"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-def mostrar_analisis_operadores(df):
-    """Análisis detallado por operador INCLUYENDO PUNTADAS"""
+    CABEZAS_POR_DEFECTO = 6
     
     if df.empty or "OPERADOR" not in df.columns:
-        return
+        return pd.DataFrame()
     
-    st.subheader("👤 Análisis por Operador")
+    resultados = []
     
-    # ✅ MÉTRICAS POR OPERADOR INCLUYENDO PUNTADAS
-    metricas_operador = df.groupby("OPERADOR").agg({
-        '#DE PEDIDO': 'count',
-        'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
-        'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
-    }).reset_index()
+    df_con_fecha = df.copy()
+    df_con_fecha['Fecha'] = df_con_fecha['Marca temporal'].dt.date
     
-    # Ajustar nombres de columnas según qué métricas están disponibles
-    if 'CANTIDAD' in df.columns and 'PUNTADAS' in df.columns:
-        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades', 'Total Puntadas']
-    elif 'CANTIDAD' in df.columns:
-        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Unidades']
-    elif 'PUNTADAS' in df.columns:
-        metricas_operador.columns = ['Operador', 'Total Pedidos', 'Total Puntadas']
-    else:
-        metricas_operador.columns = ['Operador', 'Total Pedidos']
+    # Agrupar por operador y fecha
+    grupos = df_con_fecha.groupby(['OPERADOR', 'Fecha'])
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**📊 Desempeño por Operador:**")
-        st.dataframe(metricas_operador, use_container_width=True)
-    
-    with col2:
-        # ✅ GRÁFICO DE PUNTADAS POR OPERADOR
-        if "PUNTADAS" in df.columns and 'Total Puntadas' in metricas_operador.columns:
-            fig = px.bar(
-                metricas_operador, 
-                x='Operador', 
-                y='Total Puntadas',
-                title="Puntadas Totales por Operador",
-                color='Total Puntadas',
-                text='Total Puntadas'
-            )
-            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            # Gráfico de pedidos por operador como fallback
-            fig = px.bar(
-                metricas_operador, 
-                x='Operador', 
-                y='Total Pedidos',
-                title="Pedidos por Operador",
-                color='Total Pedidos',
-                text='Total Pedidos'
-            )
-            fig.update_traces(texttemplate='%{text}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-
-def mostrar_analisis_puntadas(df):
-    """✅ NUEVA SECCIÓN: Análisis específico de puntadas"""
-    
-    if df.empty or "PUNTADAS" not in df.columns:
-        return
-    
-    st.subheader("🪡 Análisis de Puntadas Base")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top operadores por puntadas
-        puntadas_por_operador = df.groupby("OPERADOR")["PUNTADAS"].sum().sort_values(ascending=False).reset_index()
-        puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
-        
-        st.write("**🏆 Ranking por Puntadas Base:**")
-        st.dataframe(puntadas_por_operador, use_container_width=True)
-    
-    with col2:
-        # Distribución de puntadas por tipo de prenda
-        if "TIPO DE PRENDA" in df.columns:
-            puntadas_por_prenda = df.groupby("TIPO DE PRENDA")["PUNTADAS"].sum().reset_index()
-            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas']
-            
-            if len(puntadas_por_prenda) > 0:
-                fig = px.pie(
-                    puntadas_por_prenda, 
-                    values='Total Puntadas', 
-                    names='Tipo de Prenda',
-                    title="Distribución de Puntadas Base por Tipo de Prenda"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-def mostrar_analisis_pedidos(df):
-    """Análisis de pedidos y producción"""
-    
-    if df.empty:
-        return
-    
-    st.subheader("📦 Análisis de Pedidos")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top diseños más producidos
-        if "DISEÑO" in df.columns:
-            top_diseños = df["DISEÑO"].value_counts().head(10).reset_index()
-            top_diseños.columns = ['Diseño', 'Cantidad']
-            
-            st.write("**🎨 Top Diseños:**")
-            st.dataframe(top_diseños, use_container_width=True)
-    
-    with col2:
-        # Tipos de prenda más comunes
-        if "TIPO DE PRENDA" in df.columns:
-            tipos_prenda = df["TIPO DE PRENDA"].value_counts().reset_index()
-            tipos_prenda.columns = ['Tipo de Prenda', 'Cantidad']
-            
-            if len(tipos_prenda) > 0:
-                fig = px.pie(
-                    tipos_prenda, 
-                    values='Cantidad', 
-                    names='Tipo de Prenda',
-                    title="Distribución por Tipo de Prenda"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-# ✅ CORREGIDO COMPLETAMENTE: Función de tendencias temporales
-def mostrar_tendencias_temporales(df, df_calculado=None):
-    """Mostrar tendencias a lo largo del tiempo INCLUYENDO CÁLCULOS"""
-    
-    if df.empty or "Marca temporal" not in df.columns:
-        st.info("No hay datos temporales disponibles para mostrar tendencias.")
-        return
-    
-    st.subheader("📈 Tendencias Temporales")
-    
-    try:
-        # ✅ CORREGIDO: Crear columna de fecha correctamente
-        df_temporal = df.copy()
-        df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
-        
-        # Agrupar por fecha
-        tendencias = df_temporal.groupby('Fecha').agg({
-            '#DE PEDIDO': 'count',
-            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
-            'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
-        }).reset_index()
-        
-        # ✅ CORREGIDO: AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
-        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
-            df_calc_temporal = df_calculado.copy()
-            if 'FECHA' in df_calc_temporal.columns:
-                # Asegurar que FECHA sea tipo fecha
-                if df_calc_temporal['FECHA'].dtype == 'object':
-                    df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+    for (operador, fecha), grupo in grupos:
+        # Calcular cambios de color por ORDEN
+        for idx, (indice_fila, fila) in enumerate(grupo.iterrows()):
+            # Verificar que tenemos los datos necesarios
+            if pd.isna(fila.get("CANTIDAD")) or pd.isna(fila.get("PUNTADAS")):
+                continue
                 
-                # Agrupar cálculos por fecha
-                tendencias_calc = df_calc_temporal.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
-                tendencias_calc.columns = ['Fecha', 'TOTAL_PUNTADAS']  # Renombrar para merge
-                
-                # Hacer merge con las tendencias principales
-                tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
-        
-        if len(tendencias) > 1:
-            # Gráfico de pedidos por día
-            fig = px.line(
-                tendencias, 
-                x='Fecha', 
-                y='#DE PEDIDO',
-                title="Evolución de Pedidos por Día",
-                markers=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            piezas = fila["CANTIDAD"]
+            puntadas_base = fila["PUNTADAS"]
             
-            # Gráfico de puntadas por día (si existen)
-            if "PUNTADAS" in df.columns:
-                fig2 = px.line(
-                    tendencias, 
-                    x='Fecha', 
-                    y='PUNTADAS',
-                    title="Evolución de Puntadas Base por Día",
-                    markers=True,
-                    color_discrete_sequence=['red']
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+            # Tomar cabezas de la columna del sheets si existe
+            cabezas = None
+            posibles_nombres_columnas = ["CABEZAS", "NO_DE_CABEZAS", "NUMERO_CABEZAS", "NO CABEZAS"]
             
-            # ✅ NUEVO GRÁFICO: Puntadas calculadas por día
-            if "TOTAL_PUNTADAS" in tendencias.columns and not tendencias["TOTAL_PUNTADAS"].isna().all():
-                fig3 = px.line(
-                    tendencias, 
-                    x='Fecha', 
-                    y='TOTAL_PUNTADAS',
-                    title="Evolución de Puntadas Calculadas por Día",
-                    markers=True,
-                    color_discrete_sequence=['green']
-                )
-                st.plotly_chart(fig3, use_container_width=True)
-        else:
-            st.info("Se necesitan datos de más de un día para mostrar tendencias.")
+            for nombre_columna in posibles_nombres_columnas:
+                if nombre_columna in fila and not pd.isna(fila[nombre_columna]):
+                    try:
+                        cabezas = float(fila[nombre_columna])
+                        break
+                    except (ValueError, TypeError):
+                        continue
             
-    except Exception as e:
-        st.error(f"Error al generar tendencias temporales: {str(e)}")
-        # Mostrar información de debug
-        st.info("Columnas disponibles en los datos:")
-        st.info(f"{list(df.columns)}")
+            # Si no se encontró en columnas, usar configuración manual como respaldo
+            if cabezas is None:
+                cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
+            
+            # Calcular múltiplos
+            pasadas = np.ceil(piezas / cabezas)
+            multiplo = pasadas * cabezas
+            puntadas_ajustadas = max(puntadas_base, 4000)
+            puntadas_multiplos = multiplo * puntadas_ajustadas
+            
+            # Calcular cambios de color
+            if idx == 0:  # Primera orden del día
+                puntadas_cambios = 36000 + 18000
+            else:  # Órdenes adicionales
+                puntadas_cambios = 18000
+            
+            total_puntadas = puntadas_multiplos + puntadas_cambios
+            
+            resultados.append({
+                'OPERADOR': operador,
+                'FECHA': fecha,
+                'PEDIDO': fila.get('#DE PEDIDO', 'N/A'),
+                'TIPO_PRENDA': fila.get('TIPO DE PRENDA', 'N/A'),
+                'DISEÑO': fila.get('DISEÑO', 'N/A'),
+                'CANTIDAD': piezas,
+                'PUNTADAS_BASE': puntadas_base,
+                'CABEZAS': cabezas,
+                'PASADAS': pasadas,
+                'MULTIPLO': multiplo,
+                'PUNTADAS_MULTIPLOS': puntadas_multiplos,
+                'PUNTADAS_CAMBIOS': puntadas_cambios,
+                'TOTAL_PUNTADAS': total_puntadas,
+                'FECHA_CALCULO': datetime.now().date(),
+                'HORA_CALCULO': datetime.now().strftime("%H:%M:%S")
+            })
+    
+    return pd.DataFrame(resultados)
 
-# ✅ NUEVAS FUNCIONES PARA CÁLCULOS AUTOMÁTICOS
+# ✅ FUNCIONES DE GUARDADO EN SHEETS
 def guardar_calculos_en_sheets(df_calculado):
     """Guardar los cálculos en una nueva hoja de Google Sheets"""
     try:
@@ -425,7 +201,7 @@ def guardar_calculos_en_sheets(df_calculado):
         # Limpiar la hoja existente
         worksheet.clear()
         
-        # ✅ CONVERTIR FECHAS A STRING ANTES DE GUARDAR
+        # CONVERTIR FECHAS A STRING ANTES DE GUARDAR
         df_para_guardar = df_calculado.copy()
         
         # Convertir columnas de fecha a string
@@ -444,84 +220,6 @@ def guardar_calculos_en_sheets(df_calculado):
     except Exception as e:
         st.error(f"❌ Error al guardar cálculos: {str(e)}")
         return False
-
-def calcular_puntadas_automaticamente(df):
-    """Calcular automáticamente las puntadas cuando se cargan los datos"""
-    
-    # CONFIGURACIÓN FIJA DE MÁQUINAS (puedes ajustar estos valores)
-    CONFIG_MAQUINAS = {
-        "Susi": 6,
-        "Juan": 6,
-        "Esmeralda": 6,
-        "Rigoberto": 6,
-        "Maricela": 2,
-        # Agrega más operadores según necesites
-    }
-    
-    # Valor por defecto si el operador no está en la configuración
-    CABEZAS_POR_DEFECTO = 6
-    
-    if df.empty or "OPERADOR" not in df.columns:
-        return pd.DataFrame()
-    
-    resultados = []
-    
-    # ✅ CORREGIDO: Primero agrupar por operador y fecha para calcular correctamente los cambios
-    df_con_fecha = df.copy()
-    df_con_fecha['Fecha'] = df_con_fecha['Marca temporal'].dt.date
-    
-    # Agrupar por operador y fecha
-    grupos = df_con_fecha.groupby(['OPERADOR', 'Fecha'])
-    
-    for (operador, fecha), grupo in grupos:
-        cabezas = CONFIG_MAQUINAS.get(operador, CABEZAS_POR_DEFECTO)
-        ordenes_dia = len(grupo)
-        
-        # ✅ CORREGIDO: Calcular cambios de color por ORDEN (no por día completo)
-        for idx, (indice_fila, fila) in enumerate(grupo.iterrows()):
-            # Verificar que tenemos los datos necesarios
-            if pd.isna(fila.get("CANTIDAD")) or pd.isna(fila.get("PUNTADAS")):
-                continue
-                
-            piezas = fila["CANTIDAD"]
-            puntadas_base = fila["PUNTADAS"]
-            
-            # Calcular múltiplos
-            pasadas = np.ceil(piezas / cabezas)
-            multiplo = pasadas * cabezas
-            puntadas_ajustadas = max(puntadas_base, 4000)
-            puntadas_multiplos = multiplo * puntadas_ajustadas
-            
-            # ✅ CORREGIDO: Calcular cambios de color
-            # Primera orden del día: 36,000 (inicio turno) + 18,000 (primera orden) = 54,000
-            # Órdenes adicionales: 18,000 cada una
-            if idx == 0:  # Primera orden del día
-                puntadas_cambios = 36000 + 18000  # Inicio turno + primera orden
-            else:  # Órdenes adicionales
-                puntadas_cambios = 18000  # Solo cambio de color
-            
-            total_puntadas = puntadas_multiplos + puntadas_cambios
-            
-            resultados.append({
-                'OPERADOR': operador,
-                'FECHA': fecha,
-                'PEDIDO': fila.get('#DE PEDIDO', 'N/A'),
-                'TIPO_PRENDA': fila.get('TIPO DE PRENDA', 'N/A'),
-                'DISEÑO': fila.get('DISEÑO', 'N/A'),
-                'CANTIDAD': piezas,
-                'PUNTADAS_BASE': puntadas_base,
-                'CABEZAS': cabezas,
-                'PASADAS': pasadas,
-                'MULTIPLO': multiplo,
-                'PUNTADAS_MULTIPLOS': puntadas_multiplos,
-                'PUNTADAS_CAMBIOS': puntadas_cambios,
-                'TOTAL_PUNTADAS': total_puntadas,
-                'FECHA_CALCULO': datetime.now().date(),
-                'HORA_CALCULO': datetime.now().strftime("%H:%M:%S"),
-                'ORDEN_DEL_DIA': idx + 1  # Para debugging: ver el número de orden en el día
-            })
-    
-    return pd.DataFrame(resultados)
 
 def crear_hoja_resumen_ejecutivo():
     """Crear la hoja de resumen ejecutivo si no existe"""
@@ -655,8 +353,8 @@ def guardar_resumen_ejecutivo(df_calculado):
         st.error(f"❌ Error al guardar resumen ejecutivo: {str(e)}")
         return False
 
-def cargar_resumen_ejecutivo():
-    """Cargar datos del resumen ejecutivo desde Google Sheets"""
+def cargar_y_calcular_datos():
+    """Cargar y calcular datos desde Google Sheets"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
@@ -674,372 +372,623 @@ def cargar_resumen_ejecutivo():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
         gc = gspread.authorize(creds)
         
+        # CARGAR DATOS DE PRODUCCIÓN
         sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
-        spreadsheet = gc.open_by_key(sheet_id)
+        worksheet = gc.open_by_key(sheet_id).worksheet("reporte_de_trabajo")
+        data = worksheet.get_all_values()
+        df_raw = pd.DataFrame(data[1:], columns=data[0])
         
+        # LIMPIAR DATOS
+        df = limpiar_dataframe(df_raw)
+        
+        # CALCULAR PUNTADAS AUTOMÁTICAMENTE
+        df_calculado = calcular_puntadas_automaticamente(df)
+        
+        # ✅ GUARDAR CÁLCULOS EN SHEETS (si hay datos)
+        if not df_calculado.empty:
+            try:
+                guardar_calculos_en_sheets(df_calculado)
+                # ✅ GUARDAR RESUMEN EJECUTIVO AUTOMÁTICAMENTE
+                guardar_resumen_ejecutivo(df_calculado)
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ No se pudieron guardar los cálculos: {e}")
+        
+        # CARGAR RESUMEN EJECUTIVO
         try:
-            worksheet = spreadsheet.worksheet("resumen_ejecutivo")
-            datos = worksheet.get_all_values()
+            worksheet_resumen = gc.open_by_key(sheet_id).worksheet("resumen_ejecutivo")
+            datos_resumen = worksheet_resumen.get_all_values()
             
-            if len(datos) > 1:
-                df_resumen = pd.DataFrame(datos[1:], columns=datos[0])
+            if len(datos_resumen) > 1:
+                df_resumen = pd.DataFrame(datos_resumen[1:], columns=datos_resumen[0])
                 
                 # Convertir tipos de datos
                 if 'TOTAL_PUNTADAS' in df_resumen.columns:
                     df_resumen['TOTAL_PUNTADAS'] = pd.to_numeric(df_resumen['TOTAL_PUNTADAS'], errors='coerce')
-                if 'COMISION' in df_resumen.columns:
-                    df_resumen['COMISION'] = pd.to_numeric(df_resumen['COMISION'], errors='coerce')
-                if 'BONIFICACION' in df_resumen.columns:
-                    df_resumen['BONIFICACION'] = pd.to_numeric(df_resumen['BONIFICACION'], errors='coerce')
                 if 'COMISION_TOTAL' in df_resumen.columns:
                     df_resumen['COMISION_TOTAL'] = pd.to_numeric(df_resumen['COMISION_TOTAL'], errors='coerce')
+                if 'BONIFICACION' in df_resumen.columns:
+                    df_resumen['BONIFICACION'] = pd.to_numeric(df_resumen['BONIFICACION'], errors='coerce')
+                if 'COMISION' in df_resumen.columns:
+                    df_resumen['COMISION'] = pd.to_numeric(df_resumen['COMISION'], errors='coerce')
                 
-                return df_resumen
+                # Convertir fecha
+                if 'FECHA' in df_resumen.columns:
+                    df_resumen['FECHA'] = pd.to_datetime(df_resumen['FECHA'], errors='coerce')
+                    
             else:
-                return pd.DataFrame()
-                
+                df_resumen = pd.DataFrame()
         except:
+            df_resumen = pd.DataFrame()
+        
+        return df, df_calculado, df_resumen
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar los datos: {str(e)}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+def mostrar_analisis_puntadas_completo(df, df_calculado=None):
+    """Análisis completo de puntadas con todos los gráficos"""
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Análisis de puntadas base
+        if "PUNTADAS" in df.columns:
+            st.subheader("🪡 Análisis de Puntadas Base")
+            
+            # Top operadores por puntadas base
+            puntadas_por_operador = df.groupby("OPERADOR")["PUNTADAS"].sum().sort_values(ascending=False).reset_index()
+            puntadas_por_operador.columns = ['Operador', 'Total Puntadas']
+            
+            st.write("**🏆 Ranking por Puntadas Base:**")
+            st.dataframe(puntadas_por_operador, use_container_width=True)
+    
+    with col2:
+        # Distribución de puntadas por tipo de prenda
+        if "TIPO DE PRENDA" in df.columns and "PUNTADAS" in df.columns:
+            puntadas_por_prenda = df.groupby("TIPO DE PRENDA")["PUNTADAS"].sum().reset_index()
+            puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas']
+            
+            if len(puntadas_por_prenda) > 0:
+                fig = px.pie(
+                    puntadas_por_prenda, 
+                    values='Total Puntadas', 
+                    names='Tipo de Prenda',
+                    title="Distribución de Puntadas Base por Tipo de Prenda"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # Análisis de puntadas calculadas
+    if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+        st.subheader("🧵 Análisis de Puntadas Calculadas")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            # Distribución de puntadas calculadas por tipo de prenda
+            if "TIPO_PRENDA" in df_calculado.columns:
+                puntadas_por_prenda = df_calculado.groupby("TIPO_PRENDA")["TOTAL_PUNTADAS"].sum().reset_index()
+                puntadas_por_prenda.columns = ['Tipo de Prenda', 'Total Puntadas Calculadas']
+                
+                if len(puntadas_por_prenda) > 0:
+                    fig = px.pie(
+                        puntadas_por_prenda, 
+                        values='Total Puntadas Calculadas', 
+                        names='Tipo de Prenda',
+                        title="Distribución de Puntadas Calculadas por Tipo de Prenda"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col4:
+            # Top diseños más producidos
+            if "DISEÑO" in df.columns:
+                top_diseños = df["DISEÑO"].value_counts().head(10).reset_index()
+                top_diseños.columns = ['Diseño', 'Cantidad']
+                
+                st.write("**🎨 Top Diseños:**")
+                st.dataframe(top_diseños, use_container_width=True)
+
+def mostrar_tendencias_completas(df, df_calculado=None):
+    """Tendencias temporales completas con todos los gráficos"""
+    
+    if df.empty or "Marca temporal" not in df.columns:
+        st.info("No hay datos temporales disponibles.")
+        return
+    
+    try:
+        df_temporal = df.copy()
+        df_temporal['Fecha'] = df_temporal['Marca temporal'].dt.date
+        
+        tendencias = df_temporal.groupby('Fecha').agg({
+            '#DE PEDIDO': 'count',
+            'CANTIDAD': 'sum' if 'CANTIDAD' in df.columns else None,
+            'PUNTADAS': 'sum' if 'PUNTADAS' in df.columns else None
+        }).reset_index()
+        
+        # ✅ AGREGAR TENDENCIAS DE CÁLCULOS SI ESTÁN DISPONIBLES
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            df_calc_temporal = df_calculado.copy()
+            if 'FECHA' in df_calc_temporal.columns:
+                if df_calc_temporal['FECHA'].dtype == 'object':
+                    df_calc_temporal['FECHA'] = pd.to_datetime(df_calc_temporal['FECHA']).dt.date
+                
+                tendencias_calc = df_calc_temporal.groupby('FECHA')['TOTAL_PUNTADAS'].sum().reset_index()
+                tendencias_calc.columns = ['Fecha', 'TOTAL_PUNTADAS']
+                tendencias = tendencias.merge(tendencias_calc, on='Fecha', how='left')
+        
+        if len(tendencias) > 1:
+            # Gráfico de pedidos por día
+            fig1 = px.line(
+                tendencias, 
+                x='Fecha', 
+                y='#DE PEDIDO',
+                title="📦 Evolución de Pedidos por Día",
+                markers=True
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+            
+            # Gráficos en columnas para ahorrar espacio
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Gráfico de puntadas base por día
+                if "PUNTADAS" in df.columns:
+                    fig2 = px.line(
+                        tendencias, 
+                        x='Fecha', 
+                        y='PUNTADAS',
+                        title="🪡 Evolución de Puntadas Base por Día",
+                        markers=True,
+                        color_discrete_sequence=['red']
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+            
+            with col2:
+                # Gráfico de puntadas calculadas por día
+                if "TOTAL_PUNTADAS" in tendencias.columns and not tendencias["TOTAL_PUNTADAS"].isna().all():
+                    fig3 = px.line(
+                        tendencias, 
+                        x='Fecha', 
+                        y='TOTAL_PUNTADAS',
+                        title="🧵 Evolución de Puntadas Calculadas por Día",
+                        markers=True,
+                        color_discrete_sequence=['green']
+                    )
+                    st.plotly_chart(fig3, use_container_width=True)
+                    
+        else:
+            st.info("Se necesitan datos de más de un día para mostrar tendencias.")
+            
+    except Exception as e:
+        st.error(f"Error al generar tendencias: {str(e)}")
+
+def mostrar_analisis_operadores_completo(df_filtrado, df_calculado):
+    """Análisis completo de operadores"""
+    try:
+        st.subheader("👥 Rendimiento por Operador")
+        
+        if df_filtrado.empty:
+            st.warning("No hay datos para mostrar")
+            return
+        
+        # Métricas básicas de operadores
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_operadores = df_filtrado["OPERADOR"].nunique()
+            st.metric("Total Operadores", total_operadores)
+        
+        with col2:
+            if "CANTIDAD" in df_filtrado.columns:
+                promedio_unidades = df_filtrado.groupby("OPERADOR")["CANTIDAD"].sum().mean()
+                st.metric("Promedio Unidades/Operador", f"{promedio_unidades:.0f}")
+            else:
+                total_pedidos = len(df_filtrado)
+                st.metric("Total Pedidos", total_pedidos)
+        
+        with col3:
+            if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+                promedio_puntadas = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().mean()
+                st.metric("Promedio Puntadas/Operador", f"{promedio_puntadas:,.0f}")
+            else:
+                pedidos_por_operador = df_filtrado.groupby("OPERADOR").size().mean()
+                st.metric("Promedio Pedidos/Operador", f"{pedidos_por_operador:.1f}")
+        
+        # Gráficos de operadores
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Top operadores por cantidad de pedidos
+            operadores_pedidos = df_filtrado["OPERADOR"].value_counts().head(10)
+            if not operadores_pedidos.empty:
+                st.write("**📊 Top Operadores por Pedidos:**")
+                st.dataframe(operadores_pedidos.reset_index().rename(
+                    columns={"index": "Operador", "OPERADOR": "Total Pedidos"}
+                ), use_container_width=True)
+        
+        with col2:
+            # Top operadores por unidades producidas
+            if "CANTIDAD" in df_filtrado.columns:
+                operadores_unidades = df_filtrado.groupby("OPERADOR")["CANTIDAD"].sum().sort_values(ascending=False).head(10)
+                if not operadores_unidades.empty:
+                    st.write("**🏆 Top Operadores por Unidades:**")
+                    st.dataframe(operadores_unidades.reset_index().rename(
+                        columns={"CANTIDAD": "Total Unidades"}
+                    ), use_container_width=True)
+        
+        # Gráfico de distribución de operadores
+        st.write("**📈 Distribución de Operadores:**")
+        operadores_count = df_filtrado["OPERADOR"].value_counts().head(15)
+        
+        if not operadores_count.empty:
+            st.bar_chart(operadores_count)
+            
+        # Análisis de puntadas por operador si hay datos calculados
+        if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+            st.subheader("🧵 Puntadas por Operador")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                puntadas_operador = df_calculado.groupby("OPERADOR")["TOTAL_PUNTADAS"].sum().sort_values(ascending=False).head(10)
+                if not puntadas_operador.empty:
+                    st.write("**🏅 Top Operadores por Puntadas:**")
+                    st.dataframe(puntadas_operador.reset_index().rename(
+                        columns={"TOTAL_PUNTADAS": "Total Puntadas"}
+                    ), use_container_width=True)
+            
+            with col2:
+                # Eficiencia de operadores (puntadas por pedido)
+                eficiencia_operador = df_calculado.groupby("OPERADOR").agg({
+                    "TOTAL_PUNTADAS": ["sum", "mean"],
+                    "PEDIDO": "count"
+                }).round(0)
+                
+                eficiencia_operador.columns = ["Total_Puntadas", "Promedio_Puntadas", "Total_Pedidos"]
+                eficiencia_operador = eficiencia_operador.sort_values("Total_Puntadas", ascending=False).head(10)
+                
+                if not eficiencia_operador.empty:
+                    st.write("**📊 Eficiencia por Operador:**")
+                    st.dataframe(eficiencia_operador, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error en análisis de operadores: {str(e)}")
+
+def agrupar_comisiones_por_periodo(df_comisiones):
+    """Agrupar comisiones por períodos quincenales FIJOS (días 10 y 25 de cada mes)"""
+    try:
+        if df_comisiones.empty:
+            return pd.DataFrame()
+        
+        # Asegurarse de que FECHA es datetime
+        if df_comisiones['FECHA'].dtype == 'object':
+            df_comisiones['FECHA'] = pd.to_datetime(df_comisiones['FECHA'], errors='coerce')
+        
+        # Eliminar filas con fechas inválidas
+        df_comisiones = df_comisiones.dropna(subset=['FECHA'])
+        
+        # Función para determinar el período FIJANDO días 10 y 25 como cortes
+        def obtener_periodo_fijo(fecha):
+            dia = fecha.day
+            mes = fecha.month
+            año = fecha.year
+            
+            if 11 <= dia <= 25:
+                return f"25/{mes:02d}/{año}"
+            elif dia >= 26:
+                mes_siguiente = mes + 1 if mes < 12 else 1
+                año_siguiente = año if mes < 12 else año + 1
+                return f"10/{mes_siguiente:02d}/{año_siguiente}"
+            else:
+                return f"10/{mes:02d}/{año}"
+        
+        # Aplicar la función para crear columna de período
+        df_comisiones['PERIODO'] = df_comisiones['FECHA'].apply(obtener_periodo_fijo)
+        
+        # Agrupar por período y calcular totales
+        columnas_suma = ['COMISION', 'BONIFICACION', 'COMISION_TOTAL']
+        columnas_existentes = [col for col in columnas_suma if col in df_comisiones.columns]
+        
+        if columnas_existentes:
+            df_agrupado = df_comisiones.groupby('PERIODO', as_index=False)[columnas_existentes].sum()
+            
+            # Ordenar por período (convertir a datetime para ordenar correctamente)
+            df_agrupado['PERIODO_DT'] = pd.to_datetime(df_agrupado['PERIODO'], format='%d/%m/%Y')
+            df_agrupado = df_agrupado.sort_values('PERIODO_DT', ascending=False)
+            df_agrupado = df_agrupado.drop('PERIODO_DT', axis=1)
+            
+            return df_agrupado
+        else:
             return pd.DataFrame()
             
     except Exception as e:
-        st.error(f"❌ Error al cargar resumen ejecutivo: {str(e)}")
+        st.error(f"Error al agrupar comisiones por período: {str(e)}")
         return pd.DataFrame()
-
-def mostrar_comisiones_operador(df_resumen, operador_seleccionado):
-    """Mostrar comisiones y bonificaciones del operador"""
+        
+def comparar_puntadas_reales_vs_calculadas(df_calculado, df_resumen, operador_seleccionado):
+    """Comparar puntadas reales (comisiones) vs puntadas calculadas para análisis"""
     
-    if df_resumen.empty or operador_seleccionado is None:
+    if df_calculado is None or df_calculado.empty:
         return
     
-    # Filtrar comisiones del operador seleccionado
-    df_comisiones = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+    # Filtrar datos del operador en cálculos
+    df_operador_calc = df_calculado[df_calculado["OPERADOR"] == operador_seleccionado].copy()
     
-    if df_comisiones.empty:
-        st.info("💰 **Comisiones**: No hay comisiones registradas para este operador.")
+    if df_operador_calc.empty:
         return
     
-    # Ordenar por fecha (más reciente primero)
-    df_comisiones = df_comisiones.sort_values('FECHA', ascending=False)
+    # Aplicar misma lógica de períodos a las puntadas calculadas
+    def obtener_periodo_fijo(fecha):
+        dia = fecha.day
+        mes = fecha.month
+        año = fecha.year
+        
+        if 11 <= dia <= 25:
+            return f"25/{mes:02d}/{año}"
+        elif dia >= 26:
+            mes_siguiente = mes + 1 if mes < 12 else 1
+            año_siguiente = año if mes < 12 else año + 1
+            return f"10/{mes_siguiente:02d}/{año_siguiente}"
+        else:
+            return f"10/{mes:02d}/{año}"
     
-    st.subheader("💰 Comisiones y Bonificaciones")
+    # Agrupar puntadas calculadas por período
+    df_operador_calc['PERIODO'] = df_operador_calc['FECHA'].apply(obtener_periodo_fijo)
+    puntadas_por_periodo = df_operador_calc.groupby('PERIODO')['TOTAL_PUNTADAS'].sum().reset_index()
+    puntadas_por_periodo.columns = ['PERIODO', 'PUNTADAS_CALCULADAS']
     
-    # Mostrar resumen de comisiones
-    total_comision = df_comisiones['COMISION_TOTAL'].sum() if 'COMISION_TOTAL' in df_comisiones.columns else 0
-    total_puntadas = df_comisiones['TOTAL_PUNTADAS'].sum() if 'TOTAL_PUNTADAS' in df_comisiones.columns else 0
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Puntadas Acumuladas", f"{total_puntadas:,.0f}")
-    with col2:
-        st.metric("Total Comisión", f"${total_comision:,.2f}" if total_comision > 0 else "Por calcular")
-    with col3:
-        if total_puntadas > 0:
-            tasa_comision = (total_comision / total_puntadas) * 1000 if total_comision > 0 else 0
-            st.metric("Tasa por 1000 puntadas", f"${tasa_comision:.2f}")
-    
-    # Mostrar tabla detallada de comisiones
-    st.write("**📋 Detalle de Comisiones por Fecha:**")
-    
-    columnas_comisiones = ['FECHA', 'TOTAL_PUNTADAS', 'COMISION', 'BONIFICACION', 'COMISION_TOTAL', 'FECHA_ACTUALIZACION']
-    columnas_disponibles = [col for col in columnas_comisiones if col in df_comisiones.columns]
-    
-    df_mostrar_comisiones = df_comisiones[columnas_disponibles].copy()
-    
-    # Formatear columnas numéricas
-    if 'TOTAL_PUNTADAS' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['TOTAL_PUNTADAS'] = df_mostrar_comisiones['TOTAL_PUNTADAS'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
-    if 'COMISION' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['COMISION'] = df_mostrar_comisiones['COMISION'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
-    if 'BONIFICACION' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['BONIFICACION'] = df_mostrar_comisiones['BONIFICACION'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
-    if 'COMISION_TOTAL' in df_mostrar_comisiones.columns:
-        df_mostrar_comisiones['COMISION_TOTAL'] = df_mostrar_comisiones['COMISION_TOTAL'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) and x != "" else "Por calcular")
-    
-    st.dataframe(df_mostrar_comisiones, use_container_width=True)
-    
-    # Opción para descargar comisiones
-    csv_comisiones = df_comisiones[columnas_disponibles].to_csv(index=False)
-    st.download_button(
-        label="📥 Descargar Mis Comisiones",
-        data=csv_comisiones,
-        file_name=f"comisiones_{operador_seleccionado}.csv",
-        mime="text/csv"
-    )
+    # Si hay comisiones, mostrar comparativa
+    if df_resumen is not None and not df_resumen.empty and 'OPERADOR' in df_resumen.columns:
+        df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+        
+        if not df_comisiones_operador.empty:
+            # Agrupar comisiones por período
+            df_comisiones_agrupadas = agrupar_comisiones_por_periodo(df_comisiones_operador)
+            
+            if not df_comisiones_agrupadas.empty:
+                # Combinar puntadas calculadas con comisiones
+                df_comparativa = pd.merge(
+                    puntadas_por_periodo, 
+                    df_comisiones_agrupadas, 
+                    on='PERIODO', 
+                    how='outer'
+                )
+                
+                # Solo mostrar si hay datos para comparar
+                if not df_comparativa.empty:
+                    st.subheader("📊 Comparativa: Puntadas vs Comisiones")
+                    st.info("""
+                    **Análisis de eficiencia:**
+                    - Compara tus **puntadas calculadas** vs **comisiones recibidas**
+                    - Ayuda a identificar si el sistema actual es adecuado
+                    - Base para posibles ajustes en el sistema de comisiones
+                    """)
+                    
+                    # Crear tabla comparativa
+                    df_display = df_comparativa.copy()
+                    
+                    # Formatear columnas numéricas
+                    if 'PUNTADAS_CALCULADAS' in df_display.columns:
+                        df_display['PUNTADAS_CALCULADAS'] = df_display['PUNTADAS_CALCULADAS'].apply(
+                            lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A"
+                        )
+                    
+                    if 'COMISION_TOTAL' in df_display.columns:
+                        df_display['COMISION_TOTAL'] = df_display['COMISION_TOTAL'].apply(
+                            lambda x: f"${x:,.2f}" if pd.notna(x) else "N/A"
+                        )
+                    
+                    st.dataframe(df_display, use_container_width=True)
+                    
+                    # Análisis simple
+                    periodos_con_datos = df_comparativa.dropna().shape[0]
+                    if periodos_con_datos > 0:
+                        st.success(f"✅ {periodos_con_datos} período(s) con datos completos para análisis")
+                    else:
+                        st.info("ℹ️ No hay períodos superpuestos para comparar aún")
 
-def mostrar_consultas_operadores(df_calculado, df_resumen):
-    """Interfaz para que los operadores consulten sus puntadas calculadas Y comisiones"""
+def mostrar_consultas_operadores_compacto(df_calculado, df_resumen):
+    """Interfaz compacta para consulta de operadores - SOLO AGRUPACIÓN"""
     
     if df_calculado is None or df_calculado.empty:
         st.info("ℹ️ No hay cálculos disponibles. Los cálculos se generan automáticamente.")
         return
     
-    st.header("👤 Consulta de Puntadas y Comisiones por Operador")
-    
-    # ✅ CORREGIDO: Mejorar la conversión de fechas
-    df_consulta = df_calculado.copy()
-    
-    # Asegurar que la columna FECHA esté en formato fecha correctamente
-    if 'FECHA' in df_consulta.columns:
-        if df_consulta['FECHA'].dtype == 'object':
-            # Intentar diferentes formatos de fecha
-            try:
-                df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], errors='coerce').dt.date
-            except:
-                # Si falla, intentar parsear manualmente
-                try:
-                    df_consulta['FECHA'] = pd.to_datetime(df_consulta['FECHA'], format='%Y-%m-%d', errors='coerce').dt.date
-                except:
-                    st.warning("⚠️ No se pudieron procesar algunas fechas correctamente")
-    
     # Selección de operador
-    operadores = sorted(df_consulta["OPERADOR"].unique())
+    operadores = sorted(df_calculado["OPERADOR"].unique())
     
     if not operadores:
         st.info("No hay operadores con cálculos disponibles.")
         return
         
-    # ✅ SOLUCIÓN CORRECTA: Agregar opción vacía al inicio
     operador_seleccionado = st.selectbox(
         "Selecciona tu operador:", 
-        [""] + operadores,  # ✅ Opción vacía primero
-        index=0  # ✅ Esto selecciona la opción vacía
+        [""] + operadores,
+        index=0
     )
     
-    # ✅ Verificar si se ha seleccionado un operador válido
     if not operador_seleccionado:
         st.info("👆 **Por favor, selecciona tu nombre de la lista para ver tus puntadas y comisiones**")
-        st.warning("💡 _Si no encuentras tu nombre, verifica que hayas registrado producción hoy_")
         return
     
-    if operador_seleccionado:
-        # Filtrar datos del operador
-        df_operador = df_consulta[df_consulta["OPERADOR"] == operador_seleccionado].copy()
-        
-        # ✅ CORREGIDO: Mejorar el filtro de fechas
-        if 'FECHA' in df_operador.columns and not df_operador.empty:
-            # Asegurar que las fechas estén limpias
-            df_operador = df_operador.dropna(subset=['FECHA'])
-            
-            # Obtener todas las fechas únicas y ordenarlas (más reciente primero)
-            fechas_disponibles = sorted(df_operador["FECHA"].unique(), reverse=True)
-            
-            # Formatear fechas para mostrar en el selectbox
-            fechas_formateadas = ["Todas"] + [fecha.strftime('%Y-%m-%d') for fecha in fechas_disponibles]
-            
-            st.write(f"**📅 Fechas disponibles:** {len(fechas_disponibles)} días de registro")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                fecha_seleccionada_str = st.selectbox(
-                    "Filtrar por fecha:", 
-                    fechas_formateadas,
-                    help="Selecciona 'Todas' para ver todo el historial"
-                )
-            
-            # Aplicar filtro de fecha si no es "Todas"
-            if fecha_seleccionada_str != "Todas":
-                # Convertir la cadena seleccionada de vuelta a fecha
-                fecha_seleccionada = pd.to_datetime(fecha_seleccionada_str).date()
-                df_operador = df_operador[df_operador["FECHA"] == fecha_seleccionada]
-                st.info(f"📊 Mostrando datos del: **{fecha_seleccionada_str}**")
-            else:
-                st.info("📊 Mostrando **todo el historial** disponible")
-        
-        with col2:
-            # Filtro por pedido (solo si hay datos)
-            if not df_operador.empty and 'PEDIDO' in df_operador.columns:
-                pedidos = sorted(df_operador["PEDIDO"].unique())
-                pedido_seleccionado = st.selectbox("Filtrar por pedido:", ["Todos"] + pedidos)
-                
-                if pedido_seleccionado != "Todos":
-                    df_operador = df_operador[df_operador["PEDIDO"] == pedido_seleccionado]
-        
-        # ✅ DEBUG: Mostrar información sobre los datos filtrados
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🔍 Información de Datos")
-        if 'FECHA' in df_operador.columns:
-            st.sidebar.write(f"**Rango de fechas en datos:**")
-            if not df_operador.empty:
-                fecha_min = df_operador['FECHA'].min()
-                fecha_max = df_operador['FECHA'].max()
-                st.sidebar.write(f"• Más antiguo: {fecha_min}")
-                st.sidebar.write(f"• Más reciente: {fecha_max}")
-                st.sidebar.write(f"• Total días: {df_operador['FECHA'].nunique()}")
-            
-        # Mostrar métricas del operador
-        st.subheader(f"📊 Resumen de {operador_seleccionado}")
-        
-        if not df_operador.empty:
-            total_puntadas = df_operador["TOTAL_PUNTADAS"].sum()
-            total_pedidos = len(df_operador)
-            promedio_puntadas = total_puntadas / total_pedidos if total_pedidos > 0 else 0
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Pedidos", total_pedidos)
-            with col2:
-                st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
-            with col3:
-                st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
-            
-            # Gráfico de puntadas por fecha (solo si hay múltiples fechas)
-            if 'FECHA' in df_operador.columns and len(df_operador['FECHA'].unique()) > 1:
-                st.subheader("📈 Evolución de Puntadas")
-                puntadas_por_fecha = df_operador.groupby("FECHA")["TOTAL_PUNTADAS"].sum().reset_index()
-                puntadas_por_fecha = puntadas_por_fecha.sort_values("FECHA")
-                
-                fig = px.line(
-                    puntadas_por_fecha,
-                    x="FECHA",
-                    y="TOTAL_PUNTADAS",
-                    title=f"Puntadas de {operador_seleccionado} por Fecha",
-                    markers=True
-                )
-                fig.update_xaxes(title_text="Fecha")
-                fig.update_yaxes(title_text="Total Puntadas")
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Detalle de pedidos
-            st.subheader("📋 Detalle de Pedidos")
-            columnas_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
-                               'PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']
-            columnas_disponibles = [col for col in columnas_mostrar if col in df_operador.columns]
-            
-            df_mostrar = df_operador[columnas_disponibles].copy()
-            
-            # Formatear la columna FECHA para mostrar
-            if 'FECHA' in df_mostrar.columns:
-                df_mostrar['FECHA'] = df_mostrar['FECHA'].astype(str)
-            
-            # Formatear números grandes con separadores de miles
-            for col in ['PUNTADAS_MULTIPLOS', 'PUNTADAS_CAMBIOS', 'TOTAL_PUNTADAS']:
-                if col in df_mostrar.columns:
-                    df_mostrar[col] = df_mostrar[col].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
-            
-            if 'CANTIDAD' in df_mostrar.columns:
-                df_mostrar['CANTIDAD'] = df_mostrar['CANTIDAD'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A")
-            
-            st.dataframe(df_mostrar, use_container_width=True)
-            
-            # Opción para descargar puntadas
-            csv = df_operador[columnas_disponibles].to_csv(index=False)
-            st.download_button(
-                label="📥 Descargar Mis Puntadas",
-                data=csv,
-                file_name=f"puntadas_{operador_seleccionado}.csv",
-                mime="text/csv"
-            )
-            
-            # ✅ Mostrar comisiones del operador
-            mostrar_comisiones_operador(df_resumen, operador_seleccionado)
-            
-        else:
-            st.warning("No hay datos para los filtros seleccionados")
+    # Filtrar datos del operador
+    df_operador = df_calculado[df_calculado["OPERADOR"] == operador_seleccionado].copy()
+    
+    if df_operador.empty:
+        st.warning("No hay datos para los filtros seleccionados")
+        return
+    
+    # 1. RESUMEN DE PUNTADAS
+    st.subheader(f"📊 Resumen de {operador_seleccionado}")
+    
+    total_puntadas = df_operador["TOTAL_PUNTADAS"].sum()
+    total_pedidos = len(df_operador)
+    promedio_puntadas = total_puntadas / total_pedidos if total_pedidos > 0 else 0
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Pedidos", total_pedidos)
+    with col2:
+        st.metric("Total Puntadas", f"{total_puntadas:,.0f}")
+    with col3:
+        st.metric("Promedio por Pedido", f"{promedio_puntadas:,.0f}")
 
-# ✅ MODIFICAR la función principal para incluir el resumen ejecutivo
-def mostrar_dashboard_produccion():
+    # 2. COMISIONES POR PERÍODOS (SOLO AGRUPACIÓN)
+    st.subheader(f"💰 Comisiones por Períodos de {operador_seleccionado}")
+    
+    if df_resumen is not None and not df_resumen.empty and 'OPERADOR' in df_resumen.columns:
+        df_comisiones_operador = df_resumen[df_resumen['OPERADOR'] == operador_seleccionado].copy()
+        
+        if not df_comisiones_operador.empty:
+            df_comisiones_agrupadas = agrupar_comisiones_por_periodo(df_comisiones_operador)
+            
+            if not df_comisiones_agrupadas.empty:
+                # Mostrar métricas de comisiones agrupadas
+                col4, col5, col6 = st.columns(3)
+                
+                with col4:
+                    total_comision = df_comisiones_agrupadas['COMISION_TOTAL'].sum()
+                    st.metric("Total Acumulado", f"${total_comision:,.2f}")
+                
+                with col5:
+                    periodos_count = len(df_comisiones_agrupadas)
+                    st.metric("Períodos Pagados", periodos_count)
+                
+                with col6:
+                    promedio_por_periodo = df_comisiones_agrupadas['COMISION_TOTAL'].mean()
+                    st.metric("Promedio por Período", f"${promedio_por_periodo:,.2f}")
+                
+                # Mostrar tabla de períodos
+                st.write("**🗓️ Desglose por Períodos Quincenales:**")
+                
+                df_display = df_comisiones_agrupadas.copy()
+                df_display['COMISION'] = df_display['COMISION'].apply(lambda x: f"${x:,.2f}")
+                df_display['BONIFICACION'] = df_display['BONIFICACION'].apply(lambda x: f"${x:,.2f}")
+                df_display['COMISION_TOTAL'] = df_display['COMISION_TOTAL'].apply(lambda x: f"${x:,.2f}")
+                
+                st.dataframe(df_display, use_container_width=True)
+                
+                # Gráfico de comisiones por período
+                st.write("**📈 Evolución de Comisiones:**")
+                fig = px.bar(
+                    df_comisiones_agrupadas,
+                    x='PERIODO',
+                    y='COMISION_TOTAL',
+                    title=f"Comisiones por Período - {operador_seleccionado}",
+                    labels={'COMISION_TOTAL': 'Comisión Total', 'PERIODO': 'Período'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+            else:
+                st.info("No hay comisiones agrupadas por períodos.")
+        else:
+            st.info(f"No hay registros de comisiones para {operador_seleccionado}.")
+    else:
+        st.info("No hay datos de comisiones disponibles en el resumen ejecutivo.")
+
+    # 3. COMPARATIVA PUNTADAS VS COMISIONES (ANÁLISIS)
+    comparar_puntadas_reales_vs_calculadas(df_calculado, df_resumen, operador_seleccionado)
+
+    # 4. DETALLE DE PUNTADAS (se mantiene igual)
+    st.subheader(f"🪡 Detalle de Puntadas por Pedido")
+    
+    with st.expander("📊 Ver mis puntadas detalladas", expanded=False):
+        columnas_a_mostrar = ['FECHA', 'PEDIDO', 'TIPO_PRENDA', 'DISEÑO', 'CANTIDAD', 
+                             'PUNTADAS_BASE', 'CABEZAS', 'TOTAL_PUNTADAS']
+        
+        columnas_existentes = [col for col in columnas_a_mostrar if col in df_operador.columns]
+        
+        if columnas_existentes:
+            st.dataframe(df_operador[columnas_existentes], use_container_width=True)
+        else:
+            st.dataframe(df_operador, use_container_width=True)
+
+# ✅ FUNCIÓN PRINCIPAL QUE EXPORTA EL MÓDULO (CON PARÁMETROS)
+def mostrar_dashboard_produccion(df=None, df_calculado=None):
+    """Función principal que se llama desde app_principal.py - CON PARÁMETROS"""
     try:
-        # ✅ BOTÓN DE REFRESH EN SIDEBAR
+        # Botón de actualización
         st.sidebar.header("🔄 Actualizar Datos")
         if st.sidebar.button("🔄 Actualizar Datos en Tiempo Real", use_container_width=True):
-            # Limpiar cache de datos para forzar recarga
             st.cache_data.clear()
             st.rerun()
         
-        # ✅ AUTENTICACIÓN CON CACHE
-        @st.cache_data(ttl=300)  # Cache de 5 minutos
-        def cargar_y_calcular_datos():
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-            
-            service_account_info = {
-                "type": st.secrets["gservice_account"]["type"],
-                "project_id": st.secrets["gservice_account"]["project_id"],
-                "private_key_id": st.secrets["gservice_account"]["private_key_id"],
-                "private_key": st.secrets["gservice_account"]["private_key"],
-                "client_email": st.secrets["gservice_account"]["client_email"],
-                "client_id": st.secrets["gservice_account"]["client_id"],
-                "auth_uri": st.secrets["gservice_account"]["auth_uri"],
-                "token_uri": st.secrets["gservice_account"]["token_uri"]
-            }
-            
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
-            gc = gspread.authorize(creds)
-            
-            # ✅ CARGAR DATOS DE PRODUCCIÓN
-            sheet_id = st.secrets["gsheets"]["produccion_sheet_id"]
-            worksheet = gc.open_by_key(sheet_id).worksheet("reporte_de_trabajo")
-            data = worksheet.get_all_values()
-            df_raw = pd.DataFrame(data[1:], columns=data[0])
-            
-            # ✅ LIMPIAR DATOS
-            df = limpiar_dataframe(df_raw)
-            
-            # ✅ CALCULAR PUNTADAS AUTOMÁTICAMENTE
-            df_calculado = calcular_puntadas_automaticamente(df)
-            
-            # ✅ GUARDAR CÁLCULOS EN SHEETS (si hay datos)
-            if not df_calculado.empty:
-                try:
-                    guardar_calculos_en_sheets(df_calculado)
-                    # ✅ NUEVO: Guardar resumen ejecutivo automáticamente
-                    guardar_resumen_ejecutivo(df_calculado)
-                except Exception as e:
-                    st.sidebar.warning(f"⚠️ No se pudieron guardar los cálculos: {e}")
-            
-            # ✅ NUEVO: Cargar resumen ejecutivo
-            df_resumen = cargar_resumen_ejecutivo()
-            
-            return df, df_calculado, df_resumen
-        
-        # Cargar y calcular datos automáticamente
-        df, df_calculado, df_resumen = cargar_y_calcular_datos()
+        # Si no se pasan datos, cargarlos
+        if df is None:
+            df, df_calculado, df_resumen = cargar_y_calcular_datos()
+        else:
+            # Si se pasan datos, cargar solo el resumen
+            _, _, df_resumen = cargar_y_calcular_datos()
         
         st.sidebar.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
         st.sidebar.info(f"📊 Registros: {len(df)}")
-        if not df_calculado.empty:
+        if df_calculado is not None and not df_calculado.empty:
             st.sidebar.success(f"🧵 Cálculos: {len(df_calculado)}")
-        if not df_resumen.empty:
+        if df_resumen is not None and not df_resumen.empty:
             st.sidebar.success(f"💰 Comisiones: {len(df_resumen)} registros")
         
-        # ✅ MOSTRAR DASHBOARD
-        mostrar_interfaz_dashboard(df, df_calculado, df_resumen)
+        # INTERFAZ OPTIMIZADA
+        st.title("🏭 Dashboard de Producción")
+        
+        # Mostrar resumen rápido
+        st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
+        if df_calculado is not None and not df_calculado.empty:
+            st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
+        if df_resumen is not None and not df_resumen.empty:
+            st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
+        
+        # FILTROS
+        df_filtrado = aplicar_filtros(df)
+        
+        # PESTAÑAS PRINCIPALES OPTIMIZADAS
+        tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
+        
+        with tab1:
+            # DASHBOARD PRINCIPAL DIRECTAMENTE AQUÍ
+            st.subheader("📈 Métricas de Producción")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                total_pedidos = len(df_filtrado)
+                st.metric("Total Pedidos", f"{total_pedidos:,}")
+            
+            with col2:
+                if "CANTIDAD" in df_filtrado.columns:
+                    total_unidades = df_filtrado["CANTIDAD"].sum()
+                    st.metric("Total Unidades", f"{total_unidades:,}")
+                else:
+                    st.metric("Operadores Activos", df_filtrado["OPERADOR"].nunique())
+            
+            with col3:
+                if "OPERADOR" in df_filtrado.columns:
+                    operadores_activos = df_filtrado["OPERADOR"].nunique()
+                    st.metric("Operadores Activos", operadores_activos)
+            
+            with col4:
+                if df_calculado is not None and not df_calculado.empty and "TOTAL_PUNTADAS" in df_calculado.columns:
+                    total_puntadas_calculadas = df_calculado["TOTAL_PUNTADAS"].sum()
+                    st.metric("Total Puntadas", f"{total_puntadas_calculadas:,.0f}")
+
+            # ANÁLISIS EN PESTAÑAS ORGANIZADAS
+            tab_ops, tab_puntadas, tab_trends, tab_data = st.tabs(["👥 Operadores", "🪡 Puntadas", "📈 Tendencias", "📋 Datos"])
+            
+            with tab_ops:
+                mostrar_analisis_operadores_completo(df_filtrado, df_calculado)
+            
+            with tab_puntadas:
+                mostrar_analisis_puntadas_completo(df_filtrado, df_calculado)
+            
+            with tab_trends:
+                mostrar_tendencias_completas(df_filtrado, df_calculado)
+            
+            with tab_data:
+                with st.expander("📊 Ver datos detallados de producción", expanded=False):
+                    st.dataframe(df_filtrado, use_container_width=True, height=400)
+        
+        with tab2:
+            st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
+            mostrar_consultas_operadores_compacto(df_calculado, df_resumen)
         
     except Exception as e:
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
-
-# ✅ MODIFICAR la función de interfaz para incluir el resumen
-def mostrar_interfaz_dashboard(df, df_calculado=None, df_resumen=None):
-    """Interfaz principal del dashboard"""
-    
-    st.title("🏭 Dashboard de Producción")
-    
-    # Mostrar resumen rápido
-    st.info(f"**Base de datos cargada:** {len(df)} registros de producción")
-    if df_calculado is not None and not df_calculado.empty:
-        st.success(f"**Cálculos automáticos:** {len(df_calculado)} registros calculados")
-    if df_resumen is not None and not df_resumen.empty:
-        st.success(f"**Resumen ejecutivo:** {len(df_resumen)} registros de comisiones")
-    
-    # ✅ FILTROS
-    df_filtrado = aplicar_filtros(df)
-    
-    # ✅ PESTAÑAS PRINCIPALES
-    tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
-    
-    with tab1:
-        # ... (mantén todo el contenido del dashboard principal igual)
-        mostrar_metricas_principales(df_filtrado, df_calculado)
-        mostrar_analisis_puntadas_calculadas(df_calculado)
-        mostrar_analisis_operadores(df_filtrado)
-        mostrar_analisis_puntadas(df_filtrado)
-        mostrar_analisis_pedidos(df_filtrado)
-        mostrar_tendencias_temporales(df_filtrado, df_calculado)
-        
-        st.subheader("📋 Datos Detallados de Producción")
-        st.dataframe(df_filtrado, use_container_width=True, height=400)
-    
-    with tab2:
-        # ✅ ACTUALIZADO: Consulta para operadores INCLUYENDO COMISIONES
-        st.info("🔍 **Consulta tus puntadas calculadas automáticamente y tus comisiones**")
-        mostrar_consultas_operadores(df_calculado, df_resumen)
