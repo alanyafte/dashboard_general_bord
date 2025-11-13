@@ -941,7 +941,10 @@ def mostrar_dashboard_produccion(df=None, df_calculado=None):
         df_filtrado = aplicar_filtros(df)
         
         # PESTAÑAS PRINCIPALES OPTIMIZADAS
-        tab1, tab2 = st.tabs(["📊 Dashboard Principal", "👤 Consultar Mis Puntadas y Comisiones"])
+        tab1, tab2, tab3 = st.tabs([
+    "📊 Dashboard Principal", 
+    "👤 Consultar Mis Puntadas", 
+    "🤖 Análisis IA"])
         
         with tab1:
             # DASHBOARD PRINCIPAL DIRECTAMENTE AQUÍ
@@ -992,6 +995,12 @@ def mostrar_dashboard_produccion(df=None, df_calculado=None):
     except Exception as e:
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
+
+        
+        with tab3:  
+            st.header("Inteligencia Artificial para Producción")
+            st.info("Análisis predictivo y automático de tus datos")
+            mostrar_plugins_ia(df_filtrado, df_calculado)
 
 # AL FINAL de modulo_produccion.py - SOLO ESTO:
 
