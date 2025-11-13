@@ -992,3 +992,15 @@ def mostrar_dashboard_produccion(df=None, df_calculado=None):
     except Exception as e:
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
+
+# AL FINAL de modulo_produccion.py - SOLO ESTO:
+
+def mostrar_plugins_ia(df_produccion, df_calculado):
+    """Función para mostrar plugins de IA"""
+    try:
+        from plugin_manager import PluginManager
+        manager = PluginManager()
+        manager.cargar_plugins()
+        manager.mostrar_plugins(df_produccion, df_calculado)
+    except ImportError:
+        st.info("🔌 Los plugins de IA no están disponibles")
