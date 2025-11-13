@@ -996,8 +996,7 @@ def mostrar_dashboard_produccion(df=None, df_calculado=None):
         st.error(f"❌ Error al cargar los datos: {str(e)}")
         st.info("⚠️ Verifica que la hoja de cálculo esté accesible y la estructura sea correcta")
 
-        
-       with tab3:
+        with tab3:
             mostrar_ia_produccion(df_filtrado, df_calculado)
 
 # AL FINAL de modulo_produccion.py - SOLO ESTO:
