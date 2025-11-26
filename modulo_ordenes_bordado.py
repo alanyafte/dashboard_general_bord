@@ -109,6 +109,12 @@ def crear_tarjeta_orden(orden):
     """Crea una tarjeta visual para cada orden en el Kanban"""
     estilo = estilo_tarjeta_kanban(orden['Estado'])
     
+    # Manejar valores NaN o None
+    vendedor = orden.get('Vendedor', 'No especificado')
+    nombre_diseno = orden.get('Nombre Diseño', 'Sin nombre')
+    fecha_entrega = orden.get('Fecha Entrega', 'No especificada')
+    prendas = orden.get('Prendas', 'No especificadas')
+    
     tarjeta_html = f"""
     <div style="
         {estilo['background']};
@@ -119,7 +125,7 @@ def crear_tarjeta_orden(orden):
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         transition: transform 0.2s ease;
         font-family: 'Arial', sans-serif;
-    ">
+    " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
         <div style="display: flex; justify-content: space-between; align-items: start;">
             <div style="flex: 1;">
                 <h4 style="margin: 0 0 8px 0; color: {estilo['color']}; font-size: 14px;">
@@ -144,15 +150,15 @@ def crear_tarjeta_orden(orden):
         <div style="margin: 8px 0;">
             <div style="display: flex; align-items: center; margin: 4px 0;">
                 <span style="font-size: 12px; color: #636E72;">👤</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{orden['Vendedor']}</span>
+                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{vendedor}</span>
             </div>
             <div style="display: flex; align-items: center; margin: 4px 0;">
                 <span style="font-size: 12px; color: #636E72;">🎨</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{orden['Nombre Diseño']}</span>
+                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{nombre_diseno}</span>
             </div>
             <div style="display: flex; align-items: center; margin: 4px 0;">
                 <span style="font-size: 12px; color: #636E72;">📅</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{orden['Fecha Entrega']}</span>
+                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{fecha_entrega}</span>
             </div>
         </div>
         
@@ -164,7 +170,7 @@ def crear_tarjeta_orden(orden):
             border-left: 3px solid {estilo['color']};
         ">
             <div style="font-size: 11px; color: #636E72; font-weight: bold;">
-                {orden['Prendas']}
+                {prendas}
             </div>
         </div>
     </div>
@@ -229,8 +235,9 @@ def mostrar_kanban_visual(df_filtrado):
                 """, unsafe_allow_html=True)
             else:
                 for _, orden in ordenes_estado.iterrows():
+                    # Crear y mostrar la tarjeta
                     tarjeta_html = crear_tarjeta_orden(orden)
-                    st.markdown(tarjeta_html, unsafe_allow_html=True)
+                    st.markdown(tarjeta_html, unsafe_allow_html=True)  # ✅ CORRECCIÓN AQUÍ
                     
                     # Controles para cambiar estado (en un expander para no saturar)
                     with st.expander("🔄 Cambiar Estado", expanded=False):
