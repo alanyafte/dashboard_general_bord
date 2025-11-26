@@ -63,16 +63,16 @@ def obtener_ordenes():
     return pd.DataFrame()
 
 def actualizar_estado_orden(numero_orden, nuevo_estado):
-    """Actualizar el estado de una orden específica - CORREGIDO"""
+    """Actualizar el estado de una orden específica"""
     sheet = conectar_google_sheets()
     if sheet:
         try:
             # Obtener todos los datos para encontrar la fila
             data = sheet.get_all_records()
             
-            for i, row in enumerate(data, start=2):  # start=2 porque fila 1 son headers
+            for i, row in enumerate(data, start=2):
                 if row.get('Número Orden') == numero_orden:
-                    # CORRECCIÓN: Estado está en columna 28 (índice 27 en base 0)
+                    # Estado está en columna 28
                     sheet.update_cell(i, 28, nuevo_estado)
                     st.success(f"✅ Estado de {numero_orden} actualizado a: {nuevo_estado}")
                     return True
@@ -84,117 +84,68 @@ def actualizar_estado_orden(numero_orden, nuevo_estado):
             st.error(f"❌ Error actualizando orden: {e}")
             return False
 
-def estilo_tarjeta_kanban(estado):
-    """Devuelve el estilo CSS para cada estado del Kanban"""
-    estilos = {
-        'Pendiente': {
-            'border': '2px solid #FF6B6B',
-            'background': 'linear-gradient(135deg, #FFE8E8, #FFFFFF)',
-            'color': '#D63031'
-        },
-        'En Proceso': {
-            'border': '2px solid #FDCB6E',
-            'background': 'linear-gradient(135deg, #FFF8E1, #FFFFFF)',
-            'color': '#E17055'
-        },
-        'Completado': {
-            'border': '2px solid #00B894',
-            'background': 'linear-gradient(135deg, #E8F6F3, #FFFFFF)',
-            'color': '#00A085'
-        }
+def get_color_estado(estado):
+    """Devuelve colores para cada estado"""
+    colores = {
+        'Pendiente': {'color': '#D63031', 'bg_color': '#FFE8E8'},
+        'En Proceso': {'color': '#E17055', 'bg_color': '#FFF8E1'},
+        'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'}
     }
-    return estilos.get(estado, estilos['Pendiente'])
+    return colores.get(estado, colores['Pendiente'])
 
-def crear_tarjeta_orden(orden):
-    """Crea una tarjeta visual para cada orden en el Kanban"""
-    estilo = estilo_tarjeta_kanban(orden['Estado'])
+def crear_tarjeta_streamlit(orden):
+    """Crea una tarjeta usando solo componentes de Streamlit"""
+    color_estado = get_color_estado(orden['Estado'])
     
-    # Manejar valores NaN o None
-    vendedor = orden.get('Vendedor', 'No especificado')
-    nombre_diseno = orden.get('Nombre Diseño', 'Sin nombre')
-    fecha_entrega = orden.get('Fecha Entrega', 'No especificada')
-    prendas = orden.get('Prendas', 'No especificadas')
-    
-    tarjeta_html = f"""
-    <div style="
-        {estilo['background']};
-        border: {estilo['border']};
-        border-radius: 12px;
-        padding: 15px;
-        margin: 10px 0;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        transition: transform 0.2s ease;
-        font-family: 'Arial', sans-serif;
-    " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-        <div style="display: flex; justify-content: space-between; align-items: start;">
-            <div style="flex: 1;">
-                <h4 style="margin: 0 0 8px 0; color: {estilo['color']}; font-size: 14px;">
-                    📦 {orden['Número Orden']}
-                </h4>
-                <h3 style="margin: 0 0 10px 0; color: #2D3436; font-size: 16px; font-weight: bold;">
-                    {orden['Cliente']}
-                </h3>
-            </div>
-            <div style="
-                background: {estilo['color']}; 
-                color: white; 
-                padding: 4px 8px; 
-                border-radius: 20px; 
-                font-size: 10px; 
-                font-weight: bold;
-            ">
-                {orden['Estado']}
-            </div>
-        </div>
+    # Crear un contenedor con estilo
+    with st.container():
+        # Header de la tarjeta
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"**📦 {orden['Número Orden']}**")
+            st.markdown(f"### {orden['Cliente']}")
+        with col2:
+            st.markdown(
+                f"<div style='background-color: {color_estado['color']}; color: white; padding: 4px 8px; border-radius: 20px; text-align: center; font-size: 10px; font-weight: bold;'>{orden['Estado']}</div>", 
+                unsafe_allow_html=True
+            )
         
-        <div style="margin: 8px 0;">
-            <div style="display: flex; align-items: center; margin: 4px 0;">
-                <span style="font-size: 12px; color: #636E72;">👤</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{vendedor}</span>
-            </div>
-            <div style="display: flex; align-items: center; margin: 4px 0;">
-                <span style="font-size: 12px; color: #636E72;">🎨</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{nombre_diseno}</span>
-            </div>
-            <div style="display: flex; align-items: center; margin: 4px 0;">
-                <span style="font-size: 12px; color: #636E72;">📅</span>
-                <span style="font-size: 12px; color: #636E72; margin-left: 5px;">{fecha_entrega}</span>
-            </div>
-        </div>
+        # Información de la orden
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.caption(f"👤 **Vendedor:** {orden.get('Vendedor', 'No especificado')}")
+            st.caption(f"🎨 **Diseño:** {orden.get('Nombre Diseño', 'Sin nombre')}")
+        with col_info2:
+            st.caption(f"📅 **Entrega:** {orden.get('Fecha Entrega', 'No especificada')}")
         
-        <div style="
-            background: rgba(255,255,255,0.7); 
-            padding: 8px; 
-            border-radius: 6px; 
-            margin-top: 8px;
-            border-left: 3px solid {estilo['color']};
-        ">
-            <div style="font-size: 11px; color: #636E72; font-weight: bold;">
-                {prendas}
-            </div>
-        </div>
-    </div>
-    """
-    return tarjeta_html
+        # Prendas
+        st.markdown(
+            f"<div style='background-color: {color_estado['bg_color']}; padding: 8px; border-radius: 6px; border-left: 3px solid {color_estado['color']}; margin: 8px 0;'>"
+            f"<span style='font-size: 11px; color: #636E72; font-weight: bold;'>{orden.get('Prendas', 'No especificadas')}</span>"
+            f"</div>", 
+            unsafe_allow_html=True
+        )
+        
+        st.markdown("---")
 
 def mostrar_kanban_visual(df_filtrado):
-    """Muestra el tablero Kanban con diseño visual mejorado"""
+    """Muestra el tablero Kanban con componentes nativos de Streamlit"""
     st.subheader("🎯 Tablero Kanban Visual")
     
     # Estadísticas rápidas
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         total = len(df_filtrado)
-        st.metric("Total", total, delta=None)
+        st.metric("Total", total)
     with col2:
         pendientes = len(df_filtrado[df_filtrado['Estado'] == 'Pendiente'])
-        st.metric("Pendientes", pendientes, delta=None)
+        st.metric("Pendientes", pendientes)
     with col3:
         en_proceso = len(df_filtrado[df_filtrado['Estado'] == 'En Proceso'])
-        st.metric("En Proceso", en_proceso, delta=None)
+        st.metric("En Proceso", en_proceso)
     with col4:
         completadas = len(df_filtrado[df_filtrado['Estado'] == 'Completado'])
-        st.metric("Completadas", completadas, delta=None)
+        st.metric("Completadas", completadas)
     
     # Definir columnas del Kanban
     estados_kanban = ['Pendiente', 'En Proceso', 'Completado']
@@ -202,45 +153,28 @@ def mostrar_kanban_visual(df_filtrado):
     
     for i, estado in enumerate(estados_kanban):
         with columns[i]:
-            # Header de la columna con estilo
-            estilo = estilo_tarjeta_kanban(estado)
-            st.markdown(f"""
-            <div style="
-                background: {estilo['color']};
-                color: white;
-                padding: 12px;
-                border-radius: 8px;
-                text-align: center;
-                margin-bottom: 15px;
-                font-weight: bold;
-                font-size: 16px;
-            ">
-                {estado} ({len(df_filtrado[df_filtrado['Estado'] == estado])})
-            </div>
-            """, unsafe_allow_html=True)
+            color_estado = get_color_estado(estado)
+            
+            # Header de la columna
+            st.markdown(
+                f"<div style='background-color: {color_estado['color']}; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 16px;'>"
+                f"{estado} ({len(df_filtrado[df_filtrado['Estado'] == estado])})"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
             
             # Ordenes en este estado
             ordenes_estado = df_filtrado[df_filtrado['Estado'] == estado]
             
             if ordenes_estado.empty:
-                st.markdown("""
-                <div style="
-                    text-align: center;
-                    color: #636E72;
-                    padding: 20px;
-                    font-style: italic;
-                ">
-                    No hay órdenes en este estado
-                </div>
-                """, unsafe_allow_html=True)
+                st.info("No hay órdenes en este estado")
             else:
                 for _, orden in ordenes_estado.iterrows():
-                    # Crear y mostrar la tarjeta
-                    tarjeta_html = crear_tarjeta_orden(orden)
-                    st.markdown(tarjeta_html, unsafe_allow_html=True)  # ✅ CORRECCIÓN AQUÍ
+                    # Crear tarjeta
+                    crear_tarjeta_streamlit(orden)
                     
-                    # Controles para cambiar estado (en un expander para no saturar)
-                    with st.expander("🔄 Cambiar Estado", expanded=False):
+                    # Controles para cambiar estado
+                    with st.expander(f"🔄 Cambiar estado de {orden['Número Orden']}", expanded=False):
                         nuevo_estado = st.selectbox(
                             "Seleccionar nuevo estado:",
                             estados_kanban,
@@ -267,23 +201,8 @@ def mostrar_vista_tabla(df_filtrado):
     columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
     df_vista = df_filtrado[columnas_existentes]
     
-    # Aplicar estilo condicional a la tabla
-    def estilo_fila(estado):
-        if estado == 'Pendiente':
-            return 'background-color: #FFE8E8'
-        elif estado == 'En Proceso':
-            return 'background-color: #FFF8E1'
-        elif estado == 'Completado':
-            return 'background-color: #E8F6F3'
-        return ''
-    
-    styled_df = df_vista.style.apply(
-        lambda x: [estilo_fila(x['Estado'])] * len(x), 
-        axis=1
-    )
-    
     st.dataframe(
-        styled_df,
+        df_vista,
         use_container_width=True,
         hide_index=True
     )
@@ -349,7 +268,7 @@ def mostrar_dashboard_ordenes():
         st.info("💡 Usa el formulario web para crear la primera orden.")
         return
     
-    # Filtros globales (aparecen en todas las pestañas)
+    # Filtros globales
     st.subheader("🎛️ Filtros Globales")
     col1, col2, col3 = st.columns(3)
     
@@ -386,7 +305,7 @@ def mostrar_dashboard_ordenes():
     with tab3:
         mostrar_estadisticas(df_filtrado)
     
-    # Botones de acción rápida en el footer
+    # Botones de acción rápida
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
     
