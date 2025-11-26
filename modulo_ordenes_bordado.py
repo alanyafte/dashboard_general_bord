@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-import datetime
 
 # Configuración para Google Sheets
 SCOPE = [
@@ -11,19 +10,34 @@ SCOPE = [
 ]
 
 def conectar_google_sheets():
-    """Conectar con Google Sheets usando credenciales"""
+    """Conectar con Google Sheets usando tus credenciales existentes"""
     try:
-        # Cargar credenciales desde secrets de Streamlit
-        creds_dict = st.secrets["gcp_service_account"]
+        # Usar las credenciales que ya tienes configuradas
+        creds_dict = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"].replace('\\n', '\n'),
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
+        
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         
-        # Abrir la hoja de cálculo (ajusta el nombre según tu Sheets)
-        spreadsheet = client.open("Sistema de Ordenes de Bordado")
+        # Obtener el ID del sheet desde secrets
+        sheet_id = st.secrets["gsheets"]["ordenes_bordado_sheet_id"]
+        
+        # Abrir por ID (más confiable que por nombre)
+        spreadsheet = client.open_by_key(sheet_id)
         sheet = spreadsheet.worksheet("OrdenesBordado")
+        
         return sheet
+        
     except Exception as e:
-        st.error(f"Error conectando con Google Sheets: {e}")
+        st.error(f"❌ Error conectando con Google Sheets: {e}")
         return None
 
 def obtener_ordenes():
@@ -31,15 +45,16 @@ def obtener_ordenes():
     sheet = conectar_google_sheets()
     if sheet:
         try:
-            # Obtener todos los datos
             data = sheet.get_all_records()
             if data:
                 df = pd.DataFrame(data)
+                if 'Estado' not in df.columns:
+                    df['Estado'] = 'Pendiente'
                 return df
             else:
                 return pd.DataFrame()
         except Exception as e:
-            st.error(f"Error obteniendo órdenes: {e}")
+            st.error(f"❌ Error obteniendo órdenes: {e}")
             return pd.DataFrame()
     return pd.DataFrame()
 
@@ -48,30 +63,34 @@ def actualizar_estado_orden(numero_orden, nuevo_estado):
     sheet = conectar_google_sheets()
     if sheet:
         try:
-            # Encontrar la fila por número de orden
             data = sheet.get_all_records()
-            for i, row in enumerate(data, start=2):  # start=2 porque la fila 1 son headers
-                if row['Número Orden'] == numero_orden:
-                    # Actualizar estado (columna 25 - índice 24 en base 0)
+            for i, row in enumerate(data, start=2):
+                if row.get('Número Orden') == numero_orden:
                     sheet.update_cell(i, 25, nuevo_estado)
                     st.success(f"✅ Estado de {numero_orden} actualizado a: {nuevo_estado}")
                     return True
             st.error(f"❌ No se encontró la orden: {numero_orden}")
             return False
         except Exception as e:
-            st.error(f"Error actualizando orden: {e}")
+            st.error(f"❌ Error actualizando orden: {e}")
             return False
 
 def mostrar_dashboard_ordenes():
     """Dashboard principal de gestión de órdenes"""
     st.title("🏭 Gestión de Órdenes de Bordado")
     
+    # Información de conexión
+    with st.expander("🔗 Estado de Conexión"):
+        st.write(f"**Service Account:** {st.secrets['gservice_account']['client_email']}")
+        st.write(f"**Sheet ID:** {st.secrets['gsheets'].get('ordenes_bordado_sheet_id', 'No configurado')}")
+    
     # Cargar órdenes
-    with st.spinner("Cargando órdenes..."):
+    with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
         df_ordenes = obtener_ordenes()
     
     if df_ordenes.empty:
         st.info("📭 No hay órdenes registradas aún.")
+        st.info("💡 Usa el formulario web para crear la primera orden.")
         return
     
     # Filtros
@@ -97,7 +116,7 @@ def mostrar_dashboard_ordenes():
     if cliente_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
     
-    # Mostrar estadísticas rápidas
+    # Mostrar estadísticas
     st.subheader("📊 Resumen")
     col1, col2, col3, col4 = st.columns(4)
     
