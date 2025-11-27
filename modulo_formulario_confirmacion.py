@@ -297,7 +297,7 @@ def validar_formulario_completo(form_data):
     return True
 
 # =============================================
-# 🎯 SISTEMA DE MARCADO DE IMÁGENES CON X
+# 🎯 SISTEMA MEJORADO DE MARCADO DE IMÁGENES
 # =============================================
 
 def procesar_marcado_imagen(imagen, puntos_marcados):
@@ -305,6 +305,7 @@ def procesar_marcado_imagen(imagen, puntos_marcados):
     try:
         # Abrir la imagen
         img = Image.open(imagen)
+        width, height = img.size
         
         # Crear un objeto Draw para dibujar en la imagen
         draw = ImageDraw.Draw(img)
@@ -312,7 +313,8 @@ def procesar_marcado_imagen(imagen, puntos_marcados):
         # Dibujar una X roja en cada punto marcado
         for punto in puntos_marcados:
             x, y = punto['x'], punto['y']
-            tamaño_x = 20  # Tamaño de la X
+            # Calcular tamaño relativo basado en las dimensiones de la imagen
+            tamaño_x = max(10, min(width, height) // 30)
             
             # Dibujar línea diagonal 1 de la X
             draw.line(
@@ -327,10 +329,21 @@ def procesar_marcado_imagen(imagen, puntos_marcados):
                 fill='red',
                 width=4
             )
+            
+            # Opcional: agregar un círculo alrededor para mejor visibilidad
+            draw.ellipse(
+                [(x - tamaño_x-2, y - tamaño_x-2), (x + tamaño_x+2, y + tamaño_x+2)],
+                outline='red',
+                width=2
+            )
         
         # Convertir la imagen modificada a bytes
         img_bytes = io.BytesIO()
-        img.save(img_bytes, format='JPEG', quality=95)
+        # Mantener el formato original
+        if imagen.name.lower().endswith('.png'):
+            img.save(img_bytes, format='PNG')
+        else:
+            img.save(img_bytes, format='JPEG', quality=95)
         img_bytes.seek(0)
         
         return img_bytes
@@ -339,88 +352,139 @@ def procesar_marcado_imagen(imagen, puntos_marcados):
         st.error(f"❌ Error procesando imagen: {str(e)}")
         return None
 
-def mostrar_interface_marcado_imagen(archivo, numero_posicion):
-    """Mostrar interfaz para marcar posición en imagen"""
+def mostrar_interface_marcado_mejorada(archivo, numero_posicion):
+    """Interfaz mejorada para marcar posición en imagen"""
     
     # Inicializar session_state para esta imagen si no existe
-    if f'puntos_marcados_{numero_posicion}' not in st.session_state:
-        st.session_state[f'puntos_marcados_{numero_posicion}'] = []
+    key_puntos = f'puntos_marcados_{numero_posicion}'
+    key_imagen = f'imagen_actual_{numero_posicion}'
+    key_ancho = f'ancho_imagen_{numero_posicion}'
+    key_alto = f'alto_imagen_{numero_posicion}'
     
-    if f'imagen_actual_{numero_posicion}' not in st.session_state:
-        st.session_state[f'imagen_actual_{numero_posicion}'] = archivo
+    if key_puntos not in st.session_state:
+        st.session_state[key_puntos] = []
+    
+    if key_imagen not in st.session_state:
+        st.session_state[key_imagen] = archivo
+        # Obtener dimensiones de la imagen
+        imagen = Image.open(archivo)
+        st.session_state[key_ancho] = imagen.width
+        st.session_state[key_alto] = imagen.height
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader(f"📍 Posición {numero_posicion}")
+        st.subheader(f"📍 Posición {numero_posicion}: {archivo.name}")
         
-        # Mostrar la imagen
+        # Mostrar la imagen con dimensiones
         imagen = Image.open(archivo)
-        st.image(imagen, use_column_width=True, caption=f"Haz clic en la imagen para marcar la posición del bordado")
+        st.image(imagen, use_column_width=True, 
+                caption=f"Dimensiones: {imagen.width} x {imagen.height} píxeles")
         
-        # Crear un área interactiva para hacer clic (simulada)
-        st.info("💡 **Instrucciones:** Anota las coordenadas manualmente basándote en la imagen")
+        # Sistema de coordenadas mejorado
+        st.info("💡 **Instrucciones:** Usa los controles para marcar posiciones exactas")
         
-        # Inputs para coordenadas manuales
-        col_x, col_y = st.columns(2)
-        with col_x:
-            coord_x = st.number_input(f"Coordenada X (ancho)", 
-                                    min_value=0, 
-                                    max_value=1000, 
-                                    value=100,
-                                    key=f"coord_x_{numero_posicion}")
-        with col_y:
-            coord_y = st.number_input(f"Coordenada Y (alto)", 
-                                    min_value=0, 
-                                    max_value=1000, 
-                                    value=100,
-                                    key=f"coord_y_{numero_posicion}")
+        # Mostrar coordenadas relativas y absolutas
+        col_coord1, col_coord2, col_coord3 = st.columns(3)
         
-        # Botón para agregar marca
-        if st.button("➕ Agregar Marca X", key=f"add_mark_{numero_posicion}"):
-            nuevo_punto = {'x': coord_x, 'y': coord_y}
-            st.session_state[f'puntos_marcados_{numero_posicion}'].append(nuevo_punto)
-            st.success(f"✅ Marca agregada en X:{coord_x}, Y:{coord_y}")
-            st.rerun()
+        with col_coord1:
+            coord_x = st.slider(f"Coordenada X", 
+                              min_value=0, 
+                              max_value=st.session_state[key_ancho],
+                              value=st.session_state[key_ancho] // 2,
+                              key=f"slider_x_{numero_posicion}")
+        
+        with col_coord2:
+            coord_y = st.slider(f"Coordenada Y", 
+                              min_value=0, 
+                              max_value=st.session_state[key_alto],
+                              value=st.session_state[key_alto] // 2,
+                              key=f"slider_y_{numero_posicion}")
+        
+        with col_coord3:
+            # Coordenadas relativas (porcentaje)
+            rel_x = coord_x / st.session_state[key_ancho] * 100
+            rel_y = coord_y / st.session_state[key_alto] * 100
+            st.metric("Posición Relativa", f"{rel_x:.1f}%, {rel_y:.1f}%")
+        
+        # Botones de acción
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        
+        with col_btn1:
+            if st.button("➕ Agregar Marca", key=f"add_mark_{numero_posicion}", use_container_width=True):
+                nuevo_punto = {'x': coord_x, 'y': coord_y}
+                st.session_state[key_puntos].append(nuevo_punto)
+                st.success(f"✅ Marca agregada en X:{coord_x}, Y:{coord_y}")
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("🎯 Agregar Múltiples", key=f"add_multiple_{numero_posicion}", use_container_width=True):
+                # Agregar puntos predefinidos comunes
+                puntos_comunes = [
+                    {'x': st.session_state[key_ancho] // 2, 'y': st.session_state[key_alto] // 2},  # Centro
+                    {'x': st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},  # Izquierda
+                    {'x': 3 * st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},  # Derecha
+                ]
+                st.session_state[key_puntos].extend(puntos_comunes)
+                st.success("✅ Marcas comunes agregadas")
+                st.rerun()
     
     with col2:
         st.subheader("🔧 Controles")
         
-        # Mostrar marcas actuales
-        puntos = st.session_state[f'puntos_marcados_{numero_posicion}']
+        # Mostrar estadísticas
+        puntos = st.session_state[key_puntos]
+        st.metric("Marcas Totales", len(puntos))
+        
         if puntos:
             st.write("**Marcas actuales:**")
             for i, punto in enumerate(puntos):
-                st.write(f"{i+1}. X:{punto['x']}, Y:{punto['y']}")
+                col_info, col_del = st.columns([3, 1])
+                with col_info:
+                    rel_x = punto['x'] / st.session_state[key_ancho] * 100
+                    rel_y = punto['y'] / st.session_state[key_alto] * 100
+                    st.write(f"**{i+1}.** X:{punto['x']} ({rel_x:.1f}%)")
+                    st.write(f"     Y:{punto['y']} ({rel_y:.1f}%)")
                 
-                # Botón para eliminar marca individual
-                if st.button(f"🗑️ Eliminar {i+1}", key=f"del_{numero_posicion}_{i}"):
-                    st.session_state[f'puntos_marcados_{numero_posicion}'].pop(i)
-                    st.rerun()
+                with col_del:
+                    if st.button("🗑️", key=f"del_{numero_posicion}_{i}"):
+                        st.session_state[key_puntos].pop(i)
+                        st.rerun()
         
         else:
             st.info("No hay marcas aún")
         
-        # Botones de control
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("🔄 Limpiar Todo", key=f"clear_{numero_posicion}"):
-                st.session_state[f'puntos_marcados_{numero_posicion}'] = []
-                st.rerun()
+        # Botones de control avanzados
+        st.write("**Acciones:**")
+        if st.button("🔄 Limpiar Todo", key=f"clear_{numero_posicion}", use_container_width=True):
+            st.session_state[key_puntos] = []
+            st.rerun()
         
-        with col_btn2:
-            if st.button("↩️ Deshacer", key=f"undo_{numero_posicion}") and puntos:
-                st.session_state[f'puntos_marcados_{numero_posicion}'].pop()
-                st.rerun()
+        if st.button("📥 Exportar Coordenadas", key=f"export_{numero_posicion}", use_container_width=True) and puntos:
+            coordenadas_texto = "\n".join([f"Punto {i+1}: X={p['x']}, Y={p['y']}" for i, p in enumerate(puntos)])
+            st.download_button(
+                label="📄 Descargar Coordenadas",
+                data=coordenadas_texto,
+                file_name=f"coordenadas_posicion_{numero_posicion}.txt",
+                mime="text/plain"
+            )
         
-        # Vista previa de imagen con marcas
+        # Vista previa en tiempo real
         if puntos:
             st.subheader("👁️ Vista Previa")
             imagen_marcada = procesar_marcado_imagen(archivo, puntos)
             if imagen_marcada:
                 st.image(imagen_marcada, use_column_width=True, caption="Vista previa con marcas")
+                
+                # Botón para descargar imagen marcada
+                st.download_button(
+                    label="📷 Descargar Imagen Marcada",
+                    data=imagen_marcada.getvalue(),
+                    file_name=f"marcada_{archivo.name}",
+                    mime="image/jpeg" if archivo.name.lower().endswith(('.jpg', '.jpeg')) else "image/png"
+                )
     
-    return st.session_state[f'puntos_marcados_{numero_posicion}']
+    return st.session_state[key_puntos]
 
 def obtener_imagen_con_marcas(archivo, puntos_marcados):
     """Obtener la imagen procesada con las marcas para subir a Drive"""
@@ -437,11 +501,11 @@ def obtener_imagen_con_marcas(archivo, puntos_marcados):
     return archivo  # Fallback al archivo original
 
 # =============================================
-# 📝 FORMULARIO PRINCIPAL
+# 📝 FORMULARIO PRINCIPAL MEJORADO
 # =============================================
 
-def mostrar_formulario_creacion():
-    """Formulario para crear nuevas órdenes"""
+def mostrar_formulario_creacion_mejorado():
+    """Formulario mejorado para crear nuevas órdenes"""
     
     st.header("🆕 Crear Nueva Orden de Bordado")
     
@@ -500,14 +564,15 @@ def mostrar_formulario_creacion():
                     else:
                         st.info(f"📄 {archivo.name}")
         
-        # 🎯 SISTEMA DE MARCADO DE POSICIONES
+        # 🎯 SISTEMA MEJORADO DE MARCADO DE POSICIONES
         st.subheader("📍 Marcado de Posiciones del Bordado")
         
         st.info("""
-        **💡 Instrucciones:**
-        1. Sube imágenes de las prendas
-        2. Usa la herramienta de marcado para indicar **exactamente** dónde irá el bordado
-        3. Las marcas **X rojas** se guardarán en la imagen
+        **💡 Instrucciones Mejoradas:**
+        1. **Sube imágenes** de las prendas (Máx. 5)
+        2. **Usa los sliders** para posicionar marcas con precisión
+        3. **Vista en tiempo real** de las marcas X rojas
+        4. **Descarga** la imagen final con marcas
         """)
         
         # Subida de imágenes para marcado
@@ -518,12 +583,14 @@ def mostrar_formulario_creacion():
             key="posiciones_uploader"
         )
         
-        # Mostrar interfaces de marcado para cada imagen
+        # Mostrar interfaces de marcado mejoradas para cada imagen
         puntos_por_imagen = {}
         if posiciones_files:
+            st.success(f"📁 {len(posiciones_files)} imagen(es) cargada(s) para marcado")
+            
             for i, archivo in enumerate(posiciones_files[:5]):  # Máximo 5 imágenes
                 with st.expander(f"🎯 Marcando Posición {i+1}: {archivo.name}", expanded=True):
-                    puntos_marcados = mostrar_interface_marcado_imagen(archivo, i+1)
+                    puntos_marcados = mostrar_interface_marcado_mejorada(archivo, i+1)
                     puntos_por_imagen[f'posicion_{i+1}'] = {
                         'archivo': archivo,
                         'puntos': puntos_marcados
@@ -886,14 +953,11 @@ def mostrar_formulario_confirmacion():
     tab1, tab2, tab3 = st.tabs(["📋 Crear Orden", "✅ Confirmar Orden", "🔗 Gestión de Enlaces"])
     
     with tab1:
-        mostrar_formulario_creacion()
+        mostrar_formulario_creacion_mejorado()
     
     with tab2:
         mostrar_panel_confirmacion()
     
     with tab3:
         mostrar_gestion_enlaces()
-
-# Función principal para ejecutar el módulo
-if __name__ == "__main__":
-    mostrar_formulario_confirmacion()
+        
