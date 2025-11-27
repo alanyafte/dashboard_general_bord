@@ -1,12 +1,25 @@
+# Streamlit y visualización
 streamlit>=1.28.0
 pandas>=1.5.0
 matplotlib>=3.6.0
 numpy>=1.23.0
 seaborn>=0.12.0
+plotly>=5.15.0
+
+# Google APIs
 gspread>=5.8.0
 google-auth>=2.17.3
+google-api-python-client>=2.108.0
+google-auth-httplib2>=0.1.1       
+google-auth-oauthlib>=1.1.0       
+
+# Utilidades
 oauth2client>=4.1.3
-plotly>=5.15.0
 pytz>=2023.3
 prophet>=1.1.4
 requests>=2.31.0
+
+# PARA FORMULARIO Y CONFIRMACIÓN:
+Pillow>=10.0.0 
+python-multipart>=0.0.6  
+python-dateutil>=2.8.2   
