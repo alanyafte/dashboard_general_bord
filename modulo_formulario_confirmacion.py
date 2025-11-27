@@ -353,7 +353,7 @@ def procesar_marcado_imagen(imagen, puntos_marcados):
         return None
 
 def mostrar_interface_marcado_mejorada(archivo, numero_posicion):
-    """Interfaz mejorada para marcar posición en imagen"""
+    """Interfaz mejorada para marcar posición en imagen - CORREGIDA para formularios"""
     
     # Inicializar session_state para esta imagen si no existe
     key_puntos = f'puntos_marcados_{numero_posicion}'
@@ -406,28 +406,6 @@ def mostrar_interface_marcado_mejorada(archivo, numero_posicion):
             rel_x = coord_x / st.session_state[key_ancho] * 100
             rel_y = coord_y / st.session_state[key_alto] * 100
             st.metric("Posición Relativa", f"{rel_x:.1f}%, {rel_y:.1f}%")
-        
-        # Botones de acción
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
-        
-        with col_btn1:
-            if st.button("➕ Agregar Marca", key=f"add_mark_{numero_posicion}", use_container_width=True):
-                nuevo_punto = {'x': coord_x, 'y': coord_y}
-                st.session_state[key_puntos].append(nuevo_punto)
-                st.success(f"✅ Marca agregada en X:{coord_x}, Y:{coord_y}")
-                st.rerun()
-        
-        with col_btn2:
-            if st.button("🎯 Agregar Múltiples", key=f"add_multiple_{numero_posicion}", use_container_width=True):
-                # Agregar puntos predefinidos comunes
-                puntos_comunes = [
-                    {'x': st.session_state[key_ancho] // 2, 'y': st.session_state[key_alto] // 2},  # Centro
-                    {'x': st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},  # Izquierda
-                    {'x': 3 * st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},  # Derecha
-                ]
-                st.session_state[key_puntos].extend(puntos_comunes)
-                st.success("✅ Marcas comunes agregadas")
-                st.rerun()
     
     with col2:
         st.subheader("🔧 Controles")
@@ -447,27 +425,39 @@ def mostrar_interface_marcado_mejorada(archivo, numero_posicion):
                     st.write(f"     Y:{punto['y']} ({rel_y:.1f}%)")
                 
                 with col_del:
-                    if st.button("🗑️", key=f"del_{numero_posicion}_{i}"):
+                    # CORREGIDO: usar form_submit_button
+                    if st.form_submit_button("🗑️", key=f"del_{numero_posicion}_{i}"):
                         st.session_state[key_puntos].pop(i)
                         st.rerun()
         
         else:
             st.info("No hay marcas aún")
         
-        # Botones de control avanzados
+        # Botones de control avanzados - CORREGIDO: usar form_submit_button
         st.write("**Acciones:**")
-        if st.button("🔄 Limpiar Todo", key=f"clear_{numero_posicion}", use_container_width=True):
-            st.session_state[key_puntos] = []
+        
+        # Botón para agregar marca
+        if st.form_submit_button("➕ Agregar Marca", key=f"add_mark_{numero_posicion}"):
+            nuevo_punto = {'x': coord_x, 'y': coord_y}
+            st.session_state[key_puntos].append(nuevo_punto)
+            st.success(f"✅ Marca agregada en X:{coord_x}, Y:{coord_y}")
             st.rerun()
         
-        if st.button("📥 Exportar Coordenadas", key=f"export_{numero_posicion}", use_container_width=True) and puntos:
-            coordenadas_texto = "\n".join([f"Punto {i+1}: X={p['x']}, Y={p['y']}" for i, p in enumerate(puntos)])
-            st.download_button(
-                label="📄 Descargar Coordenadas",
-                data=coordenadas_texto,
-                file_name=f"coordenadas_posicion_{numero_posicion}.txt",
-                mime="text/plain"
-            )
+        # Botón para agregar múltiples
+        if st.form_submit_button("🎯 Agregar Múltiples", key=f"add_multiple_{numero_posicion}"):
+            puntos_comunes = [
+                {'x': st.session_state[key_ancho] // 2, 'y': st.session_state[key_alto] // 2},
+                {'x': st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},
+                {'x': 3 * st.session_state[key_ancho] // 4, 'y': st.session_state[key_alto] // 2},
+            ]
+            st.session_state[key_puntos].extend(puntos_comunes)
+            st.success("✅ Marcas comunes agregadas")
+            st.rerun()
+        
+        # Botón para limpiar
+        if st.form_submit_button("🔄 Limpiar Todo", key=f"clear_{numero_posicion}"):
+            st.session_state[key_puntos] = []
+            st.rerun()
         
         # Vista previa en tiempo real
         if puntos:
@@ -475,17 +465,9 @@ def mostrar_interface_marcado_mejorada(archivo, numero_posicion):
             imagen_marcada = procesar_marcado_imagen(archivo, puntos)
             if imagen_marcada:
                 st.image(imagen_marcada, use_column_width=True, caption="Vista previa con marcas")
-                
-                # Botón para descargar imagen marcada
-                st.download_button(
-                    label="📷 Descargar Imagen Marcada",
-                    data=imagen_marcada.getvalue(),
-                    file_name=f"marcada_{archivo.name}",
-                    mime="image/jpeg" if archivo.name.lower().endswith(('.jpg', '.jpeg')) else "image/png"
-                )
     
     return st.session_state[key_puntos]
-
+    
 def obtener_imagen_con_marcas(archivo, puntos_marcados):
     """Obtener la imagen procesada con las marcas para subir a Drive"""
     if not puntos_marcados:
