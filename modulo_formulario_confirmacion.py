@@ -5,7 +5,8 @@ import uuid
 from datetime import datetime
 import pandas as pd
 import io
-from PIL import Image
+from PIL import Image, ImageDraw
+import base64
 
 # Configuración para Google Sheets y Drive
 SCOPE = [
@@ -31,7 +32,6 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         
-        # ✅ CORRECTO: Usar el nombre de la clave
         sheet_id = st.secrets["gsheets"]["ordenes_bordado_sheet_id"]
         spreadsheet = client.open_by_key(sheet_id)
         sheet = spreadsheet.worksheet("OrdenesBordado")
@@ -296,13 +296,156 @@ def validar_formulario_completo(form_data):
     
     return True
 
+# =============================================
+# 🎯 SISTEMA DE MARCADO DE IMÁGENES CON X
+# =============================================
+
+def procesar_marcado_imagen(imagen, puntos_marcados):
+    """Procesar imagen y agregar marcas X en las posiciones especificadas"""
+    try:
+        # Abrir la imagen
+        img = Image.open(imagen)
+        
+        # Crear un objeto Draw para dibujar en la imagen
+        draw = ImageDraw.Draw(img)
+        
+        # Dibujar una X roja en cada punto marcado
+        for punto in puntos_marcados:
+            x, y = punto['x'], punto['y']
+            tamaño_x = 20  # Tamaño de la X
+            
+            # Dibujar línea diagonal 1 de la X
+            draw.line(
+                [(x - tamaño_x, y - tamaño_x), (x + tamaño_x, y + tamaño_x)],
+                fill='red',
+                width=4
+            )
+            
+            # Dibujar línea diagonal 2 de la X
+            draw.line(
+                [(x + tamaño_x, y - tamaño_x), (x - tamaño_x, y + tamaño_x)],
+                fill='red',
+                width=4
+            )
+        
+        # Convertir la imagen modificada a bytes
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='JPEG', quality=95)
+        img_bytes.seek(0)
+        
+        return img_bytes
+        
+    except Exception as e:
+        st.error(f"❌ Error procesando imagen: {str(e)}")
+        return None
+
+def mostrar_interface_marcado_imagen(archivo, numero_posicion):
+    """Mostrar interfaz para marcar posición en imagen"""
+    
+    # Inicializar session_state para esta imagen si no existe
+    if f'puntos_marcados_{numero_posicion}' not in st.session_state:
+        st.session_state[f'puntos_marcados_{numero_posicion}'] = []
+    
+    if f'imagen_actual_{numero_posicion}' not in st.session_state:
+        st.session_state[f'imagen_actual_{numero_posicion}'] = archivo
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader(f"📍 Posición {numero_posicion}")
+        
+        # Mostrar la imagen
+        imagen = Image.open(archivo)
+        st.image(imagen, use_column_width=True, caption=f"Haz clic en la imagen para marcar la posición del bordado")
+        
+        # Crear un área interactiva para hacer clic (simulada)
+        st.info("💡 **Instrucciones:** Anota las coordenadas manualmente basándote en la imagen")
+        
+        # Inputs para coordenadas manuales
+        col_x, col_y = st.columns(2)
+        with col_x:
+            coord_x = st.number_input(f"Coordenada X (ancho)", 
+                                    min_value=0, 
+                                    max_value=1000, 
+                                    value=100,
+                                    key=f"coord_x_{numero_posicion}")
+        with col_y:
+            coord_y = st.number_input(f"Coordenada Y (alto)", 
+                                    min_value=0, 
+                                    max_value=1000, 
+                                    value=100,
+                                    key=f"coord_y_{numero_posicion}")
+        
+        # Botón para agregar marca
+        if st.button("➕ Agregar Marca X", key=f"add_mark_{numero_posicion}"):
+            nuevo_punto = {'x': coord_x, 'y': coord_y}
+            st.session_state[f'puntos_marcados_{numero_posicion}'].append(nuevo_punto)
+            st.success(f"✅ Marca agregada en X:{coord_x}, Y:{coord_y}")
+            st.rerun()
+    
+    with col2:
+        st.subheader("🔧 Controles")
+        
+        # Mostrar marcas actuales
+        puntos = st.session_state[f'puntos_marcados_{numero_posicion}']
+        if puntos:
+            st.write("**Marcas actuales:**")
+            for i, punto in enumerate(puntos):
+                st.write(f"{i+1}. X:{punto['x']}, Y:{punto['y']}")
+                
+                # Botón para eliminar marca individual
+                if st.button(f"🗑️ Eliminar {i+1}", key=f"del_{numero_posicion}_{i}"):
+                    st.session_state[f'puntos_marcados_{numero_posicion}'].pop(i)
+                    st.rerun()
+        
+        else:
+            st.info("No hay marcas aún")
+        
+        # Botones de control
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🔄 Limpiar Todo", key=f"clear_{numero_posicion}"):
+                st.session_state[f'puntos_marcados_{numero_posicion}'] = []
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("↩️ Deshacer", key=f"undo_{numero_posicion}") and puntos:
+                st.session_state[f'puntos_marcados_{numero_posicion}'].pop()
+                st.rerun()
+        
+        # Vista previa de imagen con marcas
+        if puntos:
+            st.subheader("👁️ Vista Previa")
+            imagen_marcada = procesar_marcado_imagen(archivo, puntos)
+            if imagen_marcada:
+                st.image(imagen_marcada, use_column_width=True, caption="Vista previa con marcas")
+    
+    return st.session_state[f'puntos_marcados_{numero_posicion}']
+
+def obtener_imagen_con_marcas(archivo, puntos_marcados):
+    """Obtener la imagen procesada con las marcas para subir a Drive"""
+    if not puntos_marcados:
+        return archivo  # Devolver archivo original si no hay marcas
+    
+    imagen_procesada = procesar_marcado_imagen(archivo, puntos_marcados)
+    if imagen_procesada:
+        # Crear un nuevo archivo en memoria con las marcas
+        archivo_marcado = io.BytesIO(imagen_procesada.getvalue())
+        archivo_marcado.name = f"marcada_{archivo.name}"
+        return archivo_marcado
+    
+    return archivo  # Fallback al archivo original
+
+# =============================================
+# 📝 FORMULARIO PRINCIPAL
+# =============================================
 
 def mostrar_formulario_creacion():
     """Formulario para crear nuevas órdenes"""
     
     st.header("🆕 Crear Nueva Orden de Bordado")
     
-    with st.form("nueva_orden_form", clear_on_submit=True):
+    with st.form("nueva_orden_form", clear_on_submit=False):
         # Información básica
         col1, col2 = st.columns(2)
         
@@ -336,51 +479,55 @@ def mostrar_formulario_creacion():
         
         detalles_posicion = st.text_area("📝 Detalles de Posición", placeholder="Especificaciones adicionales sobre la posición...")
         
-        # Subida de archivos
-        st.subheader("🖼️ Archivos Adjuntos")
+        # Subida de archivos - DISEÑOS
+        st.subheader("🎨 Diseños (Máx. 5)")
+        disenos_files = st.file_uploader(
+            "Subir diseños", 
+            type=['jpg', 'png', 'jpeg', 'pdf'],
+            accept_multiple_files=True,
+            key="disenos_uploader"
+        )
         
-        col_files1, col_files2 = st.columns(2)
-        
-        with col_files1:
-            st.write("**Diseños (Máx. 5)**")
-            disenos_files = st.file_uploader(
-                "Subir diseños", 
-                type=['jpg', 'png', 'jpeg', 'pdf'],
-                accept_multiple_files=True,
-                key="disenos_uploader",
-                label_visibility="collapsed"
-            )
-            
-            # Mostrar preview de diseños
-            if disenos_files:
-                st.write("**Vista previa de diseños:**")
-                cols = st.columns(min(3, len(disenos_files)))
-                for i, archivo in enumerate(disenos_files[:3]):
-                    with cols[i]:
-                        if archivo.type.startswith('image/'):
-                            image = Image.open(archivo)
-                            st.image(image, caption=f"Diseño {i+1}", width=100)
-                        else:
-                            st.info(f"📄 {archivo.name}")
-        
-        with col_files2:
-            st.write("**Imágenes de Posición (Máx. 5)**")
-            posiciones_files = st.file_uploader(
-                "Subir posiciones", 
-                type=['jpg', 'png', 'jpeg'],
-                accept_multiple_files=True,
-                key="posiciones_uploader",
-                label_visibility="collapsed"
-            )
-            
-            # Mostrar preview de posiciones
-            if posiciones_files:
-                st.write("**Vista previa de posiciones:**")
-                cols = st.columns(min(3, len(posiciones_files)))
-                for i, archivo in enumerate(posiciones_files[:3]):
-                    with cols[i]:
+        # Mostrar preview de diseños
+        if disenos_files:
+            st.write("**Vista previa de diseños:**")
+            cols = st.columns(min(3, len(disenos_files)))
+            for i, archivo in enumerate(disenos_files[:3]):
+                with cols[i]:
+                    if archivo.type.startswith('image/'):
                         image = Image.open(archivo)
-                        st.image(image, caption=f"Posición {i+1}", width=100)
+                        st.image(image, caption=f"Diseño {i+1}", width=150)
+                    else:
+                        st.info(f"📄 {archivo.name}")
+        
+        # 🎯 SISTEMA DE MARCADO DE POSICIONES
+        st.subheader("📍 Marcado de Posiciones del Bordado")
+        
+        st.info("""
+        **💡 Instrucciones:**
+        1. Sube imágenes de las prendas
+        2. Usa la herramienta de marcado para indicar **exactamente** dónde irá el bordado
+        3. Las marcas **X rojas** se guardarán en la imagen
+        """)
+        
+        # Subida de imágenes para marcado
+        posiciones_files = st.file_uploader(
+            "Subir imágenes para marcar posiciones (Máx. 5)", 
+            type=['jpg', 'png', 'jpeg'],
+            accept_multiple_files=True,
+            key="posiciones_uploader"
+        )
+        
+        # Mostrar interfaces de marcado para cada imagen
+        puntos_por_imagen = {}
+        if posiciones_files:
+            for i, archivo in enumerate(posiciones_files[:5]):  # Máximo 5 imágenes
+                with st.expander(f"🎯 Marcando Posición {i+1}: {archivo.name}", expanded=True):
+                    puntos_marcados = mostrar_interface_marcado_imagen(archivo, i+1)
+                    puntos_por_imagen[f'posicion_{i+1}'] = {
+                        'archivo': archivo,
+                        'puntos': puntos_marcados
+                    }
         
         # Información de contacto para confirmación
         st.subheader("📧 Información para Confirmación")
@@ -409,7 +556,8 @@ def mostrar_formulario_creacion():
                 'telefono_cliente': telefono_cliente,
                 'notas_generales': notas_generales,
                 'disenos_files': disenos_files,
-                'posiciones_files': posiciones_files
+                'posiciones_files': posiciones_files,
+                'puntos_por_imagen': puntos_por_imagen
             }
             
             if validar_formulario_completo(form_data):
@@ -423,10 +571,27 @@ def crear_orden_con_confirmacion(form_data):
         token_confirmacion = str(uuid.uuid4())
         numero_orden = generar_numero_orden()
         
-        # Subir archivos a Drive
-        with st.spinner("📤 Subiendo archivos a Drive..."):
-            urls_disenos = subir_archivos_drive(form_data['disenos_files'], "disenos")
-            urls_posiciones = subir_archivos_drive(form_data['posiciones_files'], "posiciones")
+        # Subir archivos a Drive - DISEÑOS
+        urls_disenos = []
+        if form_data['disenos_files']:
+            with st.spinner("📤 Subiendo diseños a Drive..."):
+                urls_disenos = subir_archivos_drive(form_data['disenos_files'], "disenos")
+        
+        # Subir archivos a Drive - POSICIONES CON MARCAS
+        urls_posiciones = []
+        if form_data['puntos_por_imagen']:
+            with st.spinner("📤 Subiendo imágenes de posición con marcas..."):
+                for key, datos in form_data['puntos_por_imagen'].items():
+                    if datos['puntos']:  # Solo procesar si hay marcas
+                        archivo_marcado = obtener_imagen_con_marcas(datos['archivo'], datos['puntos'])
+                        url = subir_archivo_drive(archivo_marcado, f"posicion_{key}")
+                        if url:
+                            urls_posiciones.append(url)
+                    else:
+                        # Subir imagen original si no hay marcas
+                        url = subir_archivo_drive(datos['archivo'], f"posicion_{key}")
+                        if url:
+                            urls_posiciones.append(url)
         
         # Preparar datos para Google Sheets
         datos_orden = {
@@ -460,11 +625,10 @@ def crear_orden_con_confirmacion(form_data):
         for i, url in enumerate(urls_posiciones[:5], 1):
             datos_orden[f'Posición {i}'] = url
         
-        # Rellenar diseños faltantes
+        # Rellenar campos faltantes
         for i in range(len(urls_disenos) + 1, 6):
             datos_orden[f'Diseño {i}'] = ''
         
-        # Rellenar posiciones faltantes
         for i in range(len(urls_posiciones) + 1, 6):
             datos_orden[f'Posición {i}'] = ''
         
@@ -506,6 +670,10 @@ def crear_orden_con_confirmacion(form_data):
     except Exception as e:
         st.error(f"❌ Error al crear orden: {str(e)}")
         return False
+
+# =============================================
+# 🎯 FUNCIONES DE CONFIRMACIÓN
+# =============================================
 
 def mostrar_interfaz_confirmacion(token):
     """Mostrar interfaz de confirmación para un token específico"""
@@ -566,7 +734,7 @@ def mostrar_interfaz_confirmacion(token):
     # Mostrar archivos adjuntos
     mostrar_archivos_adjuntos = False
     for i in range(1, 6):
-        if orden.get(f'Diseño {i}') and 'simulated' not in orden[f'Diseño {i}']:
+        if orden.get(f'Diseño {i}'):
             mostrar_archivos_adjuntos = True
             break
     
@@ -577,17 +745,23 @@ def mostrar_interfaz_confirmacion(token):
         st.write("**Diseños:**")
         cols_disenos = st.columns(5)
         for i in range(1, 6):
-            if orden.get(f'Diseño {i}') and 'simulated' not in orden[f'Diseño {i}']:
+            if orden.get(f'Diseño {i}'):
                 with cols_disenos[i-1]:
-                    st.image(orden[f'Diseño {i}'], caption=f"Diseño {i}", use_column_width=True)
+                    try:
+                        st.image(orden[f'Diseño {i}'], caption=f"Diseño {i}", use_column_width=True)
+                    except:
+                        st.info(f"Diseño {i}\n(No se puede mostrar)")
         
         # Posiciones
         st.write("**Posiciones:**")
         cols_posiciones = st.columns(5)
         for i in range(1, 6):
-            if orden.get(f'Posición {i}') and 'simulated' not in orden[f'Posición {i}']:
+            if orden.get(f'Posición {i}'):
                 with cols_posiciones[i-1]:
-                    st.image(orden[f'Posición {i}'], caption=f"Posición {i}", use_column_width=True)
+                    try:
+                        st.image(orden[f'Posición {i}'], caption=f"Posición {i}", use_column_width=True)
+                    except:
+                        st.info(f"Posición {i}\n(No se puede mostrar)")
     
     # Mostrar notas generales si existen
     if orden.get('Notas Generales'):
@@ -719,3 +893,7 @@ def mostrar_formulario_confirmacion():
     
     with tab3:
         mostrar_gestion_enlaces()
+
+# Función principal para ejecutar el módulo
+if __name__ == "__main__":
+    mostrar_formulario_confirmacion()
