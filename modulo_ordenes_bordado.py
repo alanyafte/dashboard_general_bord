@@ -87,11 +87,21 @@ def actualizar_estado_orden(numero_orden, nuevo_estado):
 def get_color_estado(estado):
     """Devuelve colores para cada estado"""
     colores = {
+        'Pendiente Confirmación': {'color': '#FF6B6B', 'bg_color': '#FFE8E8'},
         'Pendiente': {'color': '#D63031', 'bg_color': '#FFE8E8'},
+        'Confirmado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
         'En Proceso': {'color': '#E17055', 'bg_color': '#FFF8E1'},
         'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'}
     }
     return colores.get(estado, colores['Pendiente'])
+
+# Y actualizar los estados en mostrar_kanban_visual:
+def mostrar_kanban_visual(df_filtrado):
+    """Muestra el tablero Kanban con componentes nativos de Streamlit"""
+    st.subheader("🎯 Tablero Kanban Visual")
+    
+    # Definir columnas del Kanban (ACTUALIZADO)
+    estados_kanban = ['Pendiente Confirmación', 'Confirmado', 'En Proceso', 'Completado']
 
 def crear_tarjeta_streamlit(orden):
     """Crea una tarjeta usando solo componentes de Streamlit"""
