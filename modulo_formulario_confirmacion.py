@@ -10,7 +10,8 @@ from PIL import Image
 # Configuración para Google Sheets y Drive
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive"        
 ]
 
 def conectar_google_sheets():
@@ -30,7 +31,7 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         
-        sheet_id = st.secrets["gsheets"]["1FOEM0t9Z9B5cODwaD67OP8k8jBUgJICMGkR5ECANCPM"]
+        sheet_id = st.secrets["gsheets"]["ordenes_bordado_sheet_id"]
         spreadsheet = client.open_by_key(sheet_id)
         sheet = spreadsheet.worksheet("OrdenesBordado")
         
@@ -63,35 +64,97 @@ def generar_numero_orden():
     return f"BORD-{int(datetime.now().timestamp()) % 1000:03d}"
 
 def subir_archivo_drive(archivo, tipo_archivo):
-    """Subir archivo a Google Drive y retornar URL pública"""
+    """Subir archivo REAL a Google Drive (reemplaza la versión simulada)"""
     try:
-        # Para Streamlit Cloud, necesitarías implementar Google Drive API
-        # Por ahora, simulamos la subida y retornamos un placeholder
-        # EN PRODUCCIÓN: Implementar con googleapiclient.http.MediaFileUpload
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
         
-        st.warning(f"⚠️ Subida a Drive simulada - En producción implementar Google Drive API")
+        # Conectar a Drive API usando tus credenciales existentes
+        creds_dict = {
+            "type": st.secrets["gservice_account"]["type"],
+            "project_id": st.secrets["gservice_account"]["project_id"],
+            "private_key_id": st.secrets["gservice_account"]["private_key_id"],
+            "private_key": st.secrets["gservice_account"]["private_key"].replace('\\n', '\n'),
+            "client_email": st.secrets["gservice_account"]["client_email"],
+            "client_id": st.secrets["gservice_account"]["client_id"],
+            "auth_uri": st.secrets["gservice_account"]["auth_uri"],
+            "token_uri": st.secrets["gservice_account"]["token_uri"]
+        }
         
-        # Simular URL de Drive (en producción sería la URL real)
-        file_id = f"simulated_{tipo_archivo}_{uuid.uuid4().hex[:8]}"
-        return f"https://drive.google.com/uc?id={file_id}"
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Buscar o crear carpeta para diseños de bordado
+        folder_name = "Diseños_Bordado_App"
+        folder_id = buscar_o_crear_carpeta_drive(drive_service, folder_name)
+        
+        # Preparar metadata del archivo
+        file_metadata = {
+            'name': f"{tipo_archivo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}",
+            'parents': [folder_id]
+        }
+        
+        # Subir archivo
+        media = MediaIoBaseUpload(
+            io.BytesIO(archivo.getvalue()),
+            mimetype=archivo.type,
+            resumable=True
+        )
+        
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        # Hacer público el archivo
+        drive_service.permissions().create(
+            fileId=file['id'],
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+        
+        # Retornar URL directa para embedding
+        return f"https://drive.google.com/uc?id={file['id']}"
         
     except Exception as e:
-        st.error(f"❌ Error subiendo archivo: {str(e)}")
+        st.error(f"❌ Error subiendo archivo a Drive: {str(e)}")
         return None
 
-def subir_archivos_drive(archivos, tipo_archivo):
-    """Subir múltiples archivos a Drive"""
-    if not archivos:
-        return []
-    
-    urls = []
-    for i, archivo in enumerate(archivos):
-        with st.spinner(f"Subiendo {tipo_archivo} {i+1}..."):
-            url = subir_archivo_drive(archivo, tipo_archivo)
-            if url:
-                urls.append(url)
-    
-    return urls
+def buscar_o_crear_carpeta_drive(drive_service, folder_name):
+    """Buscar o crear carpeta en Drive"""
+    try:
+        # Buscar carpeta existente
+        results = drive_service.files().list(
+            q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            spaces='drive',
+            fields='files(id, name)'
+        ).execute()
+        
+        folders = results.get('files', [])
+        
+        if folders:
+            return folders[0]['id']
+        else:
+            # Crear nueva carpeta
+            folder_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            folder = drive_service.files().create(body=folder_metadata, fields='id').execute()
+            
+            # También hacer pública la carpeta
+            drive_service.permissions().create(
+                fileId=folder['id'],
+                body={'type': 'anyone', 'role': 'reader'}
+            ).execute()
+            
+            return folder['id']
+            
+    except Exception as e:
+        st.error(f"❌ Error gestionando carpeta Drive: {str(e)}")
+        return None
 
 def guardar_orden_sheets(datos_orden):
     """Guardar orden completa en Google Sheets"""
