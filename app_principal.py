@@ -24,7 +24,7 @@ HASHES_MODULOS = {
 
 # 🔐 Función de verificación
 def verificar_contraseña(input_password, stored_hash):
-    return hashlib.sha256(input_password.encode()).hexdig() == stored_hash
+    return hashlib.sha256(input_password.encode()).hexdigest() == stored_hash
 
 # Inicializar estado de sesión para cada módulo
 for modulo in HASHES_MODULOS.keys(): 
