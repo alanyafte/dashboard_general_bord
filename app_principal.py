@@ -4,7 +4,7 @@ from modulo_clima_laboral import mostrar_dashboard_clima_laboral
 from modulo_produccion import mostrar_dashboard_produccion
 from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion
 from modulo_ordenes_bordado import mostrar_dashboard_ordenes
-from modulo_formulario_confirmacion import mostrar_formulario_confirmacion  # ✅ NUEVO MÓDULO
+#from modulo_formulario_confirmacion import mostrar_formulario_confirmacion  # ✅ NUEVO MÓDULO
 
 # Configuración de la página
 st.set_page_config(
@@ -18,8 +18,8 @@ HASHES_MODULOS = {
     "🏭 Producción": "9c1900c7d367f40b9c7953e96b98c49340e567dbaccc127834956929f963d7b0",
     "👥 Clima Laboral": "ab9335cda699f64ba4dc0307308754ceae1a4caa3b8e0ec539957fe4cef6aaa8",
     "😊 Satisfacción Cliente": "d6a2339d155e81f11349280374b228b27273e8f7725a1d2f0feae84c95caa2f9",
-    "📦 Órdenes Bordado": "8919de6c5acfe6e13c804fbaec1d6ee260f27e6e0365947c29884d88d98c3852",
-    "📝 Crear/Confirmar Órdenes": "8995eeefb28d9bf4f258c49f50cbde651e93e3138c71c03883eb6bfffabea046" 
+    "📦 Órdenes Bordado": "8919de6c5acfe6e13c804fbaec1d6ee260f27e6e0365947c29884d88d98c3852"
+    #"📝 Crear/Confirmar Órdenes": "8995eeefb28d9bf4f258c49f50cbde651e93e3138c71c03883eb6bfffabea046" 
 }
 
 # 🔐 Función de verificación
@@ -36,7 +36,8 @@ st.sidebar.title("🌐 Navegación")
 modulo_seleccionado = st.sidebar.radio(
     "Seleccionar Módulo:",
     ["🏭 Producción", "👥 Clima Laboral", "😊 Satisfacción Cliente", 
-     "📦 Órdenes Bordado", "📝 Crear/Confirmar Órdenes"]  # ✅ NUEVA OPCIÓN AÑADIDA
+     "📦 Órdenes Bordado" #"📝 Crear/Confirmar Órdenes"
+    ] 
 )
 
 # Título principal
@@ -88,8 +89,8 @@ else:
     elif modulo_seleccionado == "📦 Órdenes Bordado":
         mostrar_dashboard_ordenes()
         
-    elif modulo_seleccionado == "📝 Crear/Confirmar Órdenes":  # ✅ NUEVA LÓGICA
-        mostrar_formulario_confirmacion()
+    #elif modulo_seleccionado == "📝 Crear/Confirmar Órdenes":  # ✅ NUEVA LÓGICA
+        #mostrar_formulario_confirmacion()
     
     # Botón para cerrar sesión del módulo actual
     st.sidebar.markdown("---")
