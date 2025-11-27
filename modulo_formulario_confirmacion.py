@@ -31,6 +31,7 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         
+        # ✅ CORRECTO: Usar el nombre de la clave
         sheet_id = st.secrets["gsheets"]["ordenes_bordado_sheet_id"]
         spreadsheet = client.open_by_key(sheet_id)
         sheet = spreadsheet.worksheet("OrdenesBordado")
@@ -64,7 +65,7 @@ def generar_numero_orden():
     return f"BORD-{int(datetime.now().timestamp()) % 1000:03d}"
 
 def subir_archivo_drive(archivo, tipo_archivo):
-    """Subir archivo REAL a Google Drive (reemplaza la versión simulada)"""
+    """Subir archivo REAL a Google Drive"""
     try:
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaIoBaseUpload
@@ -155,6 +156,22 @@ def buscar_o_crear_carpeta_drive(drive_service, folder_name):
     except Exception as e:
         st.error(f"❌ Error gestionando carpeta Drive: {str(e)}")
         return None
+
+def subir_archivos_drive(archivos, tipo_archivo):
+    """Subir múltiples archivos a Drive"""
+    if not archivos:
+        return []
+    
+    urls = []
+    for i, archivo in enumerate(archivos):
+        with st.spinner(f"Subiendo {tipo_archivo} {i+1}..."):
+            url = subir_archivo_drive(archivo, tipo_archivo)
+            if url:
+                urls.append(url)
+            else:
+                st.error(f"❌ Error subiendo {archivo.name}")
+    
+    return urls
 
 def guardar_orden_sheets(datos_orden):
     """Guardar orden completa en Google Sheets"""
@@ -278,6 +295,7 @@ def validar_formulario_completo(form_data):
         return False
     
     return True
+
 
 def mostrar_formulario_creacion():
     """Formulario para crear nuevas órdenes"""
