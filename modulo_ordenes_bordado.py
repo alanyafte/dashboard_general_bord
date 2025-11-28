@@ -4,7 +4,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import plotly.express as px
-from urllib.parse import urlencode
 
 # Configuración para Google Sheets
 SCOPE = [
@@ -249,148 +248,8 @@ def mostrar_estadisticas(df_filtrado):
                 fig_vendedores.update_layout(showlegend=False)
                 st.plotly_chart(fig_vendedores, use_container_width=True)
 
-def generar_link_confirmacion(numero_orden):
-    """Generar link único para confirmación del cliente (APP SEPARADA)"""
-    base_url = "https://confirmacion-clientes.streamlit.app"
-    from urllib.parse import urlencode
-    params = {'pedido': numero_orden}
-    link = f"{base_url}?{urlencode(params)}"
-    
-    # Debug
-    print(f"🔗 Link generado: {link}")
-    
-    return link
-
-def mostrar_panel_confirmaciones():
-    """Panel para gestionar confirmaciones pendientes"""
-    st.subheader("📧 Panel de Confirmaciones")
-    
-    df_ordenes = obtener_ordenes()
-    
-    # Filtrar órdenes pendientes de confirmación
-    ordenes_pendientes = df_ordenes[df_ordenes['Estado'].isin(['Pendiente', 'Pendiente Confirmación'])]
-    
-    if ordenes_pendientes.empty:
-        st.success("🎉 No hay órdenes pendientes de confirmación")
-        return
-    
-    for _, orden in ordenes_pendientes.iterrows():
-        with st.expander(f"📦 {orden['Número Orden']} - {orden['Cliente']}", expanded=False):
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.write(f"**Vendedor:** {orden.get('Vendedor', 'N/A')}")
-                st.write(f"**Fecha Entrega:** {orden.get('Fecha Entrega', 'N/A')}")
-                st.write(f"**Prendas:** {orden.get('Prendas', 'N/A')}")
-                st.write(f"**Diseño:** {orden.get('Nombre Diseño', 'N/A')}")
-            
-            with col2:
-                # Generar link de confirmación
-                link_confirmacion = generar_link_confirmacion(orden['Número Orden'])
-                st.text_area("🔗 Link para cliente:", link_confirmacion, height=60, key=f"link_{orden['Número Orden']}")
-                
-                if st.button("📋 Copiar Link", key=f"copy_{orden['Número Orden']}"):
-                    st.success("✅ Link copiado - Envíalo al cliente")
-                
-                # Acción rápida
-                if st.button("✅ Marcar como Confirmado", key=f"confirm_{orden['Número Orden']}"):
-                    if actualizar_estado_orden(orden['Número Orden'], "Confirmado por Cliente"):
-                        st.rerun()
-
-def mostrar_confirmacion_cliente(pedido_id):
-    """Interfaz para que el cliente confirme su pedido"""
-    st.title("✅ Confirmación de Pedido")
-    st.info("Por favor revise los detalles de su pedido y confirme que todo esté correcto.")
-    
-    # Obtener datos del pedido
-    df_ordenes = obtener_ordenes()
-    orden = df_ordenes[df_ordenes['Número Orden'] == pedido_id]
-    
-    if orden.empty:
-        st.error("❌ No se encontró el pedido solicitado")
-        return
-    
-    orden = orden.iloc[0]
-    
-    # Mostrar información del pedido
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📋 Información del Pedido")
-        st.write(f"**Número de Orden:** {orden['Número Orden']}")
-        st.write(f"**Cliente:** {orden['Cliente']}")
-        st.write(f"**Vendedor:** {orden.get('Vendedor', 'N/A')}")
-        st.write(f"**Fecha de Entrega:** {orden.get('Fecha Entrega', 'N/A')}")
-        st.write(f"**Prendas:** {orden.get('Prendas', 'N/A')}")
-    
-    with col2:
-        st.subheader("🎨 Especificaciones")
-        st.write(f"**Diseño:** {orden.get('Nombre Diseño', 'N/A')}")
-        st.write(f"**Colores de Hilos:** {orden.get('Colores de Hilos', 'N/A')}")
-        st.write(f"**Medidas:** {orden.get('Medidas Bordado', 'N/A')}")
-        st.write(f"**Posición:** {orden.get('Posición Bordado', 'N/A')}")
-    
-    # Mostrar imágenes si existen
-    st.subheader("🖼️ Diseños y Posiciones")
-    
-    # Diseños
-    col_disenos = st.columns(5)
-    for i in range(1, 6):
-        diseno_col = f'Diseño {i}'
-        if orden.get(diseno_col) and str(orden[diseno_col]) not in ['', 'nan', 'None']:
-            with col_disenos[i-1]:
-                try:
-                    st.image(orden[diseno_col], caption=f"Diseño {i}", use_column_width=True)
-                except:
-                    st.markdown(f"[📎 Ver Diseño {i}]({orden[diseno_col]})")
-    
-    # Sección de confirmación
-    st.markdown("---")
-    st.subheader("🔏 Confirmación del Pedido")
-    
-    opcion = st.radio(
-        "¿La información del pedido es correcta?",
-        ["✅ Sí, confirmar pedido", "❌ No, necesito cambios"]
-    )
-    
-    if opcion == "✅ Sí, confirmar pedido":
-        nombre_completo = st.text_input("✍️ Ingrese su nombre completo para firmar:")
-        email = st.text_input("📧 Email para confirmación:")
-        
-        if st.button("🎯 Confirmar y Firmar Pedido"):
-            if nombre_completo and email:
-                if actualizar_estado_orden(pedido_id, "Confirmado por Cliente"):
-                    st.balloons()
-                    st.success("🎉 ¡Pedido confirmado exitosamente!")
-                    st.info("El pedido procederá a producción.")
-            else:
-                st.error("❌ Por favor complete todos los campos")
-    
-    else:  # Necesita cambios
-        cambios = st.text_area("📝 Describa los cambios necesarios:")
-        contacto = st.text_input("📞 Mejor forma de contactarte:")
-        
-        if st.button("📤 Enviar Solicitud de Cambios"):
-            if cambios and contacto:
-                if actualizar_estado_orden(pedido_id, "Rechazado - Cambios Solicitados"):
-                    st.success("✅ Solicitud de cambios enviada")
-                    st.info("Nos pondremos en contacto contigo pronto.")
-
 def mostrar_dashboard_ordenes():
     """Dashboard principal de gestión de órdenes con pestañas"""
-    
-    # ✅ VERSIÓN CORREGIDA - Usar st.query_params
-    query_params = st.query_params
-    pedido_id = query_params.get("pedido", [None])[0] if "pedido" in query_params else None
-    modulo = query_params.get("modulo", [None])[0] if "modulo" in query_params else None
-
-    # Debug - puedes quitar estas líneas después de que funcione
-    if pedido_id or modulo:
-        st.write(f"🔍 Debug - Pedido: {pedido_id}, Módulo: {modulo}")
-
-    if pedido_id and modulo == "confirmacion":
-        mostrar_confirmacion_cliente(pedido_id)
-        return
     
     st.title("🏭 Gestión de Órdenes de Bordado")
     
@@ -437,8 +296,8 @@ def mostrar_dashboard_ordenes():
     if cliente_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
     
-    # Pestañas
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Kanban Visual", "📋 Vista Tabla", "📊 Estadísticas", "📧 Confirmaciones"])
+    # Pestañas (SOLO 3 AHORA)
+    tab1, tab2, tab3 = st.tabs(["🎯 Kanban Visual", "📋 Vista Tabla", "📊 Estadísticas"])
     
     with tab1:
         mostrar_kanban_visual(df_filtrado)
@@ -448,9 +307,6 @@ def mostrar_dashboard_ordenes():
     
     with tab3:
         mostrar_estadisticas(df_filtrado)
-
-    with tab4: 
-        mostrar_panel_confirmaciones()
     
     # Botones de acción rápida
     st.markdown("---")
