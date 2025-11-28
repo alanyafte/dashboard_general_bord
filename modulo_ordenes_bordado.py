@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import plotly.express as px
+from urllib.parse import urlencode
 
 # Configuración para Google Sheets
 SCOPE = [
@@ -94,14 +95,6 @@ def get_color_estado(estado):
         'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'}
     }
     return colores.get(estado, colores['Pendiente'])
-
-# Y actualizar los estados en mostrar_kanban_visual:
-def mostrar_kanban_visual(df_filtrado):
-    """Muestra el tablero Kanban con componentes nativos de Streamlit"""
-    st.subheader("🎯 Tablero Kanban Visual")
-    
-    # Definir columnas del Kanban (ACTUALIZADO)
-    estados_kanban = ['Pendiente Confirmación', 'Confirmado', 'En Proceso', 'Completado']
 
 def crear_tarjeta_streamlit(orden):
     """Crea una tarjeta usando solo componentes de Streamlit"""
@@ -256,112 +249,9 @@ def mostrar_estadisticas(df_filtrado):
                 fig_vendedores.update_layout(showlegend=False)
                 st.plotly_chart(fig_vendedores, use_container_width=True)
 
-def mostrar_dashboard_ordenes():
-    """Dashboard principal de gestión de órdenes con pestañas"""
-    query_params = st.experimental_get_query_params()
-    pedido_id = query_params.get("pedido", [None])[0]
-    modulo = query_params.get("modulo", [None])[0]
-
-    if pedido_id and modulo == "confirmacion":
-        mostrar_confirmacion_cliente(pedido_id)
-        return
-    
-    st.title("🏭 Gestión de Órdenes de Bordado")
-    
-    # Información de conexión
-    with st.expander("🔗 Estado de Conexión", expanded=False):
-        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
-            st.success("✅ Sheet ID configurado correctamente")
-            st.write(f"**Service Account:** {st.secrets['gservice_account']['client_email']}")
-            st.write(f"**Sheet ID:** {st.secrets['gsheets']['ordenes_bordado_sheet_id']}")
-        else:
-            st.error("❌ Sheet ID no configurado en secrets")
-    
-    # Cargar órdenes
-    with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
-        df_ordenes = obtener_ordenes()
-    
-    if df_ordenes.empty:
-        st.info("📭 No hay órdenes registradas aún.")
-        st.info("💡 Usa el formulario web para crear la primera orden.")
-        return
-    
-    # Filtros globales
-    st.subheader("🎛️ Filtros Globales")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        estados = ["Todos"] + list(df_ordenes['Estado'].unique())
-        estado_filtro = st.selectbox("Filtrar por Estado:", estados, key="filtro_estado")
-    
-    with col2:
-        vendedores = ["Todos"] + list(df_ordenes['Vendedor'].dropna().unique())
-        vendedor_filtro = st.selectbox("Filtrar por Vendedor:", vendedores, key="filtro_vendedor")
-    
-    with col3:
-        clientes = ["Todos"] + list(df_ordenes['Cliente'].dropna().unique())
-        cliente_filtro = st.selectbox("Filtrar por Cliente:", clientes, key="filtro_cliente")
-    
-    # Aplicar filtros
-    df_filtrado = df_ordenes.copy()
-    if estado_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Estado'] == estado_filtro]
-    if vendedor_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Vendedor'] == vendedor_filtro]
-    if cliente_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
-    
-    # Pestañas
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Kanban Visual", "📋 Vista Tabla", "📊 Estadísticas", "📧 Confirmaciones"])
-    
-    with tab1:
-        mostrar_kanban_visual(df_filtrado)
-    
-    with tab2:
-        mostrar_vista_tabla(df_filtrado)
-    
-    with tab3:
-        mostrar_estadisticas(df_filtrado)
-
-    with tab4: 
-        mostrar_panel_confirmaciones()
-    
-    # Botones de acción rápida
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🔄 Actualizar Todos los Datos", use_container_width=True):
-            st.rerun()
-    
-    with col2:
-        if st.button("📊 Exportar a Excel", use_container_width=True):
-            timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"ordenes_bordado_{timestamp}.xlsx"
-            df_filtrado.to_excel(filename, index=False)
-            st.success(f"✅ Datos exportados a {filename}")
-    
-    with col3:
-        if st.button("🔍 Debug Info", use_container_width=True):
-            with st.expander("🔍 Información de Debug"):
-                st.write(f"**Columnas encontradas:** {list(df_ordenes.columns)}")
-                st.write(f"**Total de órdenes:** {len(df_ordenes)}")
-                st.write(f"**Órdenes filtradas:** {len(df_filtrado)}")
-                st.write("**Primeras filas:**")
-                st.dataframe(df_ordenes.head(2))
-
-# =============================================
-# NUEVAS FUNCIONES PARA CONFIRMACIÓN
-# =============================================
-
-# =============================================
-# NUEVAS FUNCIONES PARA CONFIRMACIÓN (AGREGAR AL FINAL DEL ARCHIVO)
-# =============================================
-
 def generar_link_confirmacion(numero_orden):
     """Generar link único para confirmación del cliente"""
     base_url = "https://dashboardgeneralempresabord.streamlit.app"
-    from urllib.parse import urlencode
     params = {'pedido': numero_orden, 'modulo': 'confirmacion'}
     return f"{base_url}?{urlencode(params)}"
 
@@ -479,3 +369,97 @@ def mostrar_confirmacion_cliente(pedido_id):
                 if actualizar_estado_orden(pedido_id, "Rechazado - Cambios Solicitados"):
                     st.success("✅ Solicitud de cambios enviada")
                     st.info("Nos pondremos en contacto contigo pronto.")
+
+def mostrar_dashboard_ordenes():
+    """Dashboard principal de gestión de órdenes con pestañas"""
+    query_params = st.experimental_get_query_params()
+    pedido_id = query_params.get("pedido", [None])[0]
+    modulo = query_params.get("modulo", [None])[0]
+
+    if pedido_id and modulo == "confirmacion":
+        mostrar_confirmacion_cliente(pedido_id)
+        return
+    
+    st.title("🏭 Gestión de Órdenes de Bordado")
+    
+    # Información de conexión
+    with st.expander("🔗 Estado de Conexión", expanded=False):
+        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
+            st.success("✅ Sheet ID configurado correctamente")
+            st.write(f"**Service Account:** {st.secrets['gservice_account']['client_email']}")
+            st.write(f"**Sheet ID:** {st.secrets['gsheets']['ordenes_bordado_sheet_id']}")
+        else:
+            st.error("❌ Sheet ID no configurado en secrets")
+    
+    # Cargar órdenes
+    with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
+        df_ordenes = obtener_ordenes()
+    
+    if df_ordenes.empty:
+        st.info("📭 No hay órdenes registradas aún.")
+        st.info("💡 Usa el formulario web para crear la primera orden.")
+        return
+    
+    # Filtros globales
+    st.subheader("🎛️ Filtros Globales")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        estados = ["Todos"] + list(df_ordenes['Estado'].unique())
+        estado_filtro = st.selectbox("Filtrar por Estado:", estados, key="filtro_estado")
+    
+    with col2:
+        vendedores = ["Todos"] + list(df_ordenes['Vendedor'].dropna().unique())
+        vendedor_filtro = st.selectbox("Filtrar por Vendedor:", vendedores, key="filtro_vendedor")
+    
+    with col3:
+        clientes = ["Todos"] + list(df_ordenes['Cliente'].dropna().unique())
+        cliente_filtro = st.selectbox("Filtrar por Cliente:", clientes, key="filtro_cliente")
+    
+    # Aplicar filtros
+    df_filtrado = df_ordenes.copy()
+    if estado_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['Estado'] == estado_filtro]
+    if vendedor_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['Vendedor'] == vendedor_filtro]
+    if cliente_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
+    
+    # Pestañas
+    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Kanban Visual", "📋 Vista Tabla", "📊 Estadísticas", "📧 Confirmaciones"])
+    
+    with tab1:
+        mostrar_kanban_visual(df_filtrado)
+    
+    with tab2:
+        mostrar_vista_tabla(df_filtrado)
+    
+    with tab3:
+        mostrar_estadisticas(df_filtrado)
+
+    with tab4: 
+        mostrar_panel_confirmaciones()
+    
+    # Botones de acción rápida
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔄 Actualizar Todos los Datos", use_container_width=True):
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 Exportar a Excel", use_container_width=True):
+            timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"ordenes_bordado_{timestamp}.xlsx"
+            df_filtrado.to_excel(filename, index=False)
+            st.success(f"✅ Datos exportados a {filename}")
+    
+    with col3:
+        if st.button("🔍 Debug Info", use_container_width=True):
+            with st.expander("🔍 Información de Debug"):
+                st.write(f"**Columnas encontradas:** {list(df_ordenes.columns)}")
+                st.write(f"**Total de órdenes:** {len(df_ordenes)}")
+                st.write(f"**Órdenes filtradas:** {len(df_filtrado)}")
+                st.write("**Primeras filas:**")
+                st.dataframe(df_ordenes.head(2))
