@@ -251,10 +251,15 @@ def mostrar_estadisticas(df_filtrado):
 
 def generar_link_confirmacion(numero_orden):
     """Generar link único para confirmación del cliente (APP SEPARADA)"""
-    base_url = "https://confirmacion-clientes.streamlit.app"  # URL de tu NUEVA app
+    base_url = "https://confirmacion-clientes.streamlit.app"
     from urllib.parse import urlencode
     params = {'pedido': numero_orden}
-    return f"{base_url}?{urlencode(params)}"
+    link = f"{base_url}?{urlencode(params)}"
+    
+    # Debug
+    print(f"🔗 Link generado: {link}")
+    
+    return link
 
 def mostrar_panel_confirmaciones():
     """Panel para gestionar confirmaciones pendientes"""
