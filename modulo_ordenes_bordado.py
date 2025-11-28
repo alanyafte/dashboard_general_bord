@@ -250,9 +250,10 @@ def mostrar_estadisticas(df_filtrado):
                 st.plotly_chart(fig_vendedores, use_container_width=True)
 
 def generar_link_confirmacion(numero_orden):
-    """Generar link único para confirmación del cliente"""
-    base_url = "https://dashboardgeneralempresabord.streamlit.app"
-    params = {'pedido': numero_orden, 'modulo': 'confirmacion'}
+    """Generar link único para confirmación del cliente (APP SEPARADA)"""
+    base_url = "https://confirmacion-clientes.streamlit.app" 
+    from urllib.parse import urlencode
+    params = {'pedido': numero_orden}
     return f"{base_url}?{urlencode(params)}"
 
 def mostrar_panel_confirmaciones():
