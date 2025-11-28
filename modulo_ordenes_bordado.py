@@ -372,9 +372,15 @@ def mostrar_confirmacion_cliente(pedido_id):
 
 def mostrar_dashboard_ordenes():
     """Dashboard principal de gestión de órdenes con pestañas"""
-    query_params = st.experimental_get_query_params()
-    pedido_id = query_params.get("pedido", [None])[0]
-    modulo = query_params.get("modulo", [None])[0]
+    
+    # ✅ VERSIÓN CORREGIDA - Usar st.query_params
+    query_params = st.query_params
+    pedido_id = query_params.get("pedido", [None])[0] if "pedido" in query_params else None
+    modulo = query_params.get("modulo", [None])[0] if "modulo" in query_params else None
+
+    # Debug - puedes quitar estas líneas después de que funcione
+    if pedido_id or modulo:
+        st.write(f"🔍 Debug - Pedido: {pedido_id}, Módulo: {modulo}")
 
     if pedido_id and modulo == "confirmacion":
         mostrar_confirmacion_cliente(pedido_id)
