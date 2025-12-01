@@ -68,7 +68,8 @@ def get_color_estado(estado):
         'Pendiente': {'color': '#D63031', 'bg_color': '#FFE8E8'},
         'Confirmado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
         'En Proceso': {'color': '#E17055', 'bg_color': '#FFF8E1'},
-        'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'}
+        'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
+        'Entregado': {'color': '#6F42C1', 'bg_color': '#F3E8FF'}  # Color púrpura para Entregado
     }
     return colores.get(estado, colores['Pendiente'])
 
@@ -111,8 +112,8 @@ def mostrar_kanban_visual(df_filtrado):
     """Muestra el tablero Kanban con componentes nativos de Streamlit"""
     st.subheader("🎯 Tablero Kanban Visual")
     
-    # Estadísticas rápidas
-    col1, col2, col3, col4 = st.columns(4)
+    # Estadísticas rápidas - AHORA CON 5 COLUMNAS
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         total = len(df_filtrado)
         st.metric("Total", total)
@@ -125,9 +126,12 @@ def mostrar_kanban_visual(df_filtrado):
     with col4:
         completadas = len(df_filtrado[df_filtrado['Estado'] == 'Completado'])
         st.metric("Completadas", completadas)
+    with col5:
+        entregadas = len(df_filtrado[df_filtrado['Estado'] == 'Entregado'])
+        st.metric("Entregadas", entregadas)
     
-    # Definir columnas del Kanban
-    estados_kanban = ['Pendiente', 'En Proceso', 'Completado']
+    # Definir columnas del Kanban - AHORA CON 4 ESTADOS
+    estados_kanban = ['Pendiente', 'En Proceso', 'Completado', 'Entregado']
     columns = st.columns(len(estados_kanban))
     
     for i, estado in enumerate(estados_kanban):
