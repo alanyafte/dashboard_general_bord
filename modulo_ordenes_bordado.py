@@ -56,7 +56,7 @@ def obtener_ordenes():
     return pd.DataFrame()
 
 # ============================================================================
-# KANBAN SIMPLE Y EFECTIVO
+# KANBAN CORREGIDO - ENFOQUE DIRECTO
 # ============================================================================
 def normalizar_estado(estado):
     """Normalizar el estado a 4 categorías"""
@@ -76,8 +76,8 @@ def normalizar_estado(estado):
     else:
         return 'Pendiente'
 
-def mostrar_kanban_simple(df):
-    """Kanban ultra simple pero claro"""
+def mostrar_kanban_corregido(df):
+    """Kanban con HTML bien formado"""
     
     # Agregar estado normalizado
     df['Estado_Kanban'] = df['Estado'].apply(normalizar_estado) if 'Estado' in df.columns else 'Pendiente'
@@ -85,8 +85,8 @@ def mostrar_kanban_simple(df):
     # Estados en orden
     estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
     
-    # CSS mínimo pero efectivo
-    st.markdown("""
+    # CSS en bloque separado
+    css_html = """
     <style>
     /* Contenedor principal horizontal */
     .kanban-horizontal {
@@ -94,6 +94,7 @@ def mostrar_kanban_simple(df):
         gap: 15px;
         overflow-x: auto;
         padding: 10px 0;
+        margin-bottom: 20px;
     }
     
     /* Columna individual */
@@ -112,6 +113,7 @@ def mostrar_kanban_simple(df):
         border-bottom: 2px solid;
         border-radius: 8px 8px 0 0;
         margin-bottom: 10px;
+        font-size: 16px;
     }
     
     /* Tarjeta de orden */
@@ -136,10 +138,13 @@ def mostrar_kanban_simple(df):
     .header-listo { background: #e8f5e9; color: #198754; border-color: #198754; }
     .header-entregado { background: #f3e8ff; color: #6f42c1; border-color: #6f42c1; }
     </style>
-    """, unsafe_allow_html=True)
+    """
     
-    # Crear contenedor horizontal
-    st.markdown('<div class="kanban-horizontal">', unsafe_allow_html=True)
+    # Inyectar CSS primero
+    st.markdown(css_html, unsafe_allow_html=True)
+    
+    # Construir el HTML completo en una sola variable
+    kanban_html = '<div class="kanban-horizontal">'
     
     for estado in estados:
         # Filtrar órdenes para este estado
@@ -150,20 +155,20 @@ def mostrar_kanban_simple(df):
         header_class = f"header-{estado_class}"
         
         # Crear columna
-        col_html = f"""
+        kanban_html += f'''
         <div class="kanban-col">
             <div class="col-header {header_class}">
                 {estado} ({len(ordenes)})
             </div>
-        """
+        '''
         
         # Si no hay órdenes
         if ordenes.empty:
-            col_html += """
+            kanban_html += '''
             <div style="text-align: center; padding: 30px 20px; color: #999; font-style: italic;">
                 Sin órdenes
             </div>
-            """
+            '''
         else:
             # Ordenar por fecha si existe
             if 'Fecha Entrega' in ordenes.columns:
@@ -185,6 +190,7 @@ def mostrar_kanban_simple(df):
                     diseño += "..."
                 
                 fecha = orden.get('Fecha Entrega', '')
+                fecha_str = 'Sin fecha'
                 if pd.notna(fecha) and fecha != '':
                     try:
                         if isinstance(fecha, datetime):
@@ -193,13 +199,15 @@ def mostrar_kanban_simple(df):
                             fecha_str = str(fecha)[:10]
                     except:
                         fecha_str = str(fecha)
-                else:
-                    fecha_str = 'Sin fecha'
                 
                 vendedor = str(orden.get('Vendedor', ''))[:15]
+                if vendedor == '':
+                    vendedor = 'No asignado'
+                
+                prendas = orden.get('Prendas', '0')
                 
                 # Crear tarjeta
-                col_html += f"""
+                kanban_html += f'''
                 <div class="orden-card {estado_class}">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div style="font-weight: bold; color: #333;">{num_orden}</div>
@@ -214,55 +222,26 @@ def mostrar_kanban_simple(df):
                     
                     <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d;">
                         <div>👤 {vendedor}</div>
-                        <div>👕 {orden.get('Prendas', '0')} prendas</div>
+                        <div>👕 {prendas} prendas</div>
                     </div>
                 </div>
-                """
+                '''
         
-        col_html += "</div>"
-        st.markdown(col_html, unsafe_allow_html=True)
+        kanban_html += '</div>'
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    kanban_html += '</div>'
+    
+    # Mostrar TODO el HTML de una vez
+    st.markdown(kanban_html, unsafe_allow_html=True)
 
 # ============================================================================
-# VISTA DE TABLA (para cuando necesites ver detalles)
-# ============================================================================
-def mostrar_vista_tabla(df):
-    """Vista de tabla simple para detalles"""
-    st.subheader("📋 Vista Detallada")
-    
-    # Seleccionar columnas importantes
-    columnas_interes = [
-        'Número Orden', 'Cliente', 'Vendedor', 'Fecha Entrega',
-        'Estado', 'Prendas', 'Nombre Diseño'
-    ]
-    
-    columnas_disponibles = [c for c in columnas_interes if c in df.columns]
-    
-    if columnas_disponibles:
-        st.dataframe(
-            df[columnas_disponibles],
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No hay columnas disponibles para mostrar")
-
-# ============================================================================
-# DASHBOARD PRINCIPAL - LIMPIO Y CLARO
+# DASHBOARD PRINCIPAL - VERSIÓN FINAL CORREGIDA
 # ============================================================================
 def mostrar_dashboard_ordenes():
     """Dashboard principal - Solo Kanban limpio"""
     
     st.title("📋 Tablero de Órdenes de Bordado")
     st.markdown("---")
-    
-    # Estado de conexión (oculto por defecto)
-    with st.expander("🔗 Estado del Sistema", expanded=False):
-        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
-            st.success("✅ Conectado a Google Sheets")
-        else:
-            st.error("❌ Configuración incompleta")
     
     # Cargar datos
     with st.spinner("🔄 Cargando órdenes..."):
@@ -285,19 +264,20 @@ def mostrar_dashboard_ordenes():
     
     estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
     colores = ['#6c757d', '#0d6efd', '#198754', '#6f42c1']
+    iconos = ['⏱️', '⚙️', '✅', '📦']
     
-    for i, (estado, color) in enumerate(zip(estados, colores)):
+    for i, (estado, color, icono) in enumerate(zip(estados, colores, iconos)):
         with [col1, col2, col3, col4][i]:
             count = len(df_ordenes[df_ordenes['Estado_Simple'] == estado])
             st.markdown(f"""
             <div style="text-align: center; padding: 15px; background-color: white; 
                         border-radius: 10px; border-top: 3px solid {color}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <div style="font-size: 24px; font-weight: bold; color: {color};">{count}</div>
-                <div style="font-size: 14px; color: #495057;">{estado}</div>
+                <div style="font-size: 28px; font-weight: bold; color: {color};">{count}</div>
+                <div style="font-size: 14px; color: #495057;">{icono} {estado}</div>
             </div>
             """, unsafe_allow_html=True)
     
-    # Filtro simple (opcional)
+    # Filtro simple
     st.markdown("---")
     
     filtro_col1, filtro_col2 = st.columns(2)
@@ -334,15 +314,18 @@ def mostrar_dashboard_ordenes():
     st.markdown("---")
     st.subheader(f"🎯 Órdenes ({len(df_filtrado)})")
     
-    mostrar_kanban_simple(df_filtrado)
-    
-    # Opciones adicionales (ocultas por defecto)
-    st.markdown("---")
-    
-    with st.expander("📋 Ver en tabla", expanded=False):
-        mostrar_vista_tabla(df_filtrado)
+    # Llamar a la función corregida
+    mostrar_kanban_corregido(df_filtrado)
     
     # Botón de actualización
     if st.button("🔄 Actualizar Datos", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
+    
+    # Estado de conexión (al final)
+    with st.expander("🔗 Información del Sistema", expanded=False):
+        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
+            st.success("✅ Conectado a Google Sheets")
+            st.write(f"Órdenes cargadas: {len(df_ordenes)}")
+        else:
+            st.error("❌ Configuración incompleta")
