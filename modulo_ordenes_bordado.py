@@ -48,9 +48,6 @@ def obtener_ordenes():
             data = sheet.get_all_records()
             if data:
                 df = pd.DataFrame(data)
-                # Normalizar nombres de estado para el Kanban
-                if 'Estado' in df.columns:
-                    df['Estado_Kanban'] = df['Estado'].apply(normalizar_estado_kanban)
                 return df
             else:
                 return pd.DataFrame()
@@ -60,7 +57,7 @@ def obtener_ordenes():
     return pd.DataFrame()
 
 # ============================================================================
-# FUNCIONES AUXILIARES PARA KANBAN
+# FUNCIONES PARA KANBAN MEJORADO CON STREAMLIT NATIVO
 # ============================================================================
 def normalizar_estado_kanban(estado_original):
     """Normalizar estados a las 4 categorías del Kanban"""
@@ -69,7 +66,6 @@ def normalizar_estado_kanban(estado_original):
     
     estado = str(estado_original).strip().lower()
     
-    # Mapeo de estados
     if 'pendiente' in estado:
         return 'Pendiente'
     elif 'proceso' in estado or 'producción' in estado or 'produccion' in estado:
@@ -81,285 +77,169 @@ def normalizar_estado_kanban(estado_original):
     else:
         return 'Pendiente'
 
-def get_config_estado(estado):
-    """Configuración completa para cada estado del Kanban"""
-    configs = {
+def get_color_estado(estado):
+    """Obtener configuración de colores para cada estado"""
+    colores = {
         'Pendiente': {
             'color': '#6C757D',
             'bg_color': '#F8F9FA',
-            'icon': '⏱️',
-            'border': '3px solid #6C757D'
+            'border_color': '#6C757D',
+            'icon': '⏱️'
         },
         'En Proceso': {
             'color': '#0D6EFD',
             'bg_color': '#E8F4FD',
-            'icon': '⚙️',
-            'border': '3px solid #0D6EFD'
+            'border_color': '#0D6EFD',
+            'icon': '⚙️'
         },
         'Listo': {
             'color': '#198754',
             'bg_color': '#E8F5E9',
-            'icon': '✅',
-            'border': '3px solid #198754'
+            'border_color': '#198754',
+            'icon': '✅'
         },
         'Entregado': {
             'color': '#6F42C1',
             'bg_color': '#F3E8FF',
-            'icon': '📦',
-            'border': '3px solid #6F42C1'
+            'border_color': '#6F42C1',
+            'icon': '📦'
         }
     }
-    return configs.get(estado, configs['Pendiente'])
+    return colores.get(estado, colores['Pendiente'])
 
-# ============================================================================
-# CSS PARA EL KANBAN - CORREGIDO
-# ============================================================================
-def inject_kanban_css():
-    """Inyectar CSS correctamente para Streamlit"""
-    css = """
-    <style>
-    /* Contenedor principal del Kanban */
-    .kanban-container {
-        display: flex !important;
-        gap: 20px !important;
-        padding: 20px 0 !important;
-        overflow-x: auto !important;
-        min-height: calc(100vh - 200px) !important;
-        background-color: #f0f2f6 !important;
-        border-radius: 10px !important;
-    }
+def crear_tarjeta_orden(orden, estado_kanban):
+    """Crear una tarjeta de orden usando solo Streamlit nativo"""
+    config = get_color_estado(estado_kanban)
     
-    /* Columnas del Kanban */
-    .kanban-column {
-        flex: 1 !important;
-        min-width: 320px !important;
-        background: #F8F9FA !important;
-        border-radius: 12px !important;
-        padding: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        max-height: 75vh !important;
-        overflow-y: auto !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    }
-    
-    /* Cabecera de columna */
-    .column-header {
-        padding: 15px 20px !important;
-        border-bottom: 1px solid #DEE2E6 !important;
-        background: white !important;
-        border-radius: 12px 12px 0 0 !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 10 !important;
-    }
-    
-    .column-title {
-        font-size: 16px !important;
-        font-weight: 600 !important;
-        display: flex !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        margin-bottom: 8px !important;
-    }
-    
-    .column-count {
-        background: #E9ECEF !important;
-        color: #495057 !important;
-        padding: 4px 12px !important;
-        border-radius: 20px !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-    }
-    
-    .column-subtitle {
-        font-size: 12px !important;
-        color: #6C757D !important;
-        margin-top: 4px !important;
-    }
-    
-    /* Contenedor de tarjetas */
-    .cards-container {
-        padding: 15px !important;
-        flex-grow: 1 !important;
-    }
-    
-    /* Tarjetas individuales */
-    .kanban-card {
-        background: white !important;
-        border-radius: 10px !important;
-        padding: 15px !important;
-        margin-bottom: 15px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-        transition: all 0.3s ease !important;
-        cursor: default !important;
-        height: 180px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-        border-top: 3px solid !important;
-    }
-    
-    .kanban-card:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1) !important;
-    }
-    
-    /* Estilos para tarjetas vacías */
-    .empty-column {
-        text-align: center !important;
-        padding: 40px 20px !important;
-        color: #ADB5BD !important;
-        font-style: italic !important;
-        background: white !important;
-        border-radius: 8px !important;
-        border: 2px dashed #DEE2E6 !important;
-        margin: 10px !important;
-    }
-    
-    /* Scrollbar styling */
-    .kanban-column::-webkit-scrollbar {
-        width: 6px !important;
-    }
-    
-    .kanban-column::-webkit-scrollbar-track {
-        background: #F1F3F5 !important;
-        border-radius: 10px !important;
-    }
-    
-    .kanban-column::-webkit-scrollbar-thumb {
-        background: #ADB5BD !important;
-        border-radius: 10px !important;
-    }
-    
-    .kanban-column::-webkit-scrollbar-thumb:hover {
-        background: #6C757D !important;
-    }
-    </style>
-    """
-    st.markdown(css, unsafe_allow_html=True)
-
-# ============================================================================
-# FUNCIONES PARA CREAR TARJETAS Y KANBAN
-# ============================================================================
-def crear_tarjeta_kanban(orden):
-    """Crear tarjeta HTML estilizada para el Kanban"""
-    config = get_config_estado(orden['Estado_Kanban'])
-    
-    # Formatear fecha si existe
+    # Formatear fecha
     fecha_entrega = orden.get('Fecha Entrega', '')
     fecha_str = 'Sin fecha'
     if pd.notna(fecha_entrega) and fecha_entrega != '':
         try:
             if isinstance(fecha_entrega, datetime):
                 fecha_str = fecha_entrega.strftime('%d/%m')
-            elif isinstance(fecha_entrega, str) and len(fecha_entrega) >= 10:
-                fecha_str = fecha_entrega[:10]
+            elif isinstance(fecha_entrega, str):
+                fecha_str = fecha_entrega[:10] if len(fecha_entrega) >= 10 else fecha_entrega
             else:
                 fecha_str = str(fecha_entrega)
         except:
             fecha_str = str(fecha_entrega)
     
-    # Truncar texto largo
-    cliente = str(orden.get('Cliente', 'Cliente no especificado'))[:30]
-    cliente = cliente + "..." if len(str(orden.get('Cliente', ''))) > 30 else cliente
-    
-    diseño = str(orden.get('Nombre Diseño', 'Sin nombre'))[:40]
-    diseño = diseño + "..." if len(str(orden.get('Nombre Diseño', ''))) > 40 else diseño
-    
-    vendedor = str(orden.get('Vendedor', 'Sin vendedor'))[:20]
-    
-    # Crear HTML de la tarjeta
-    html = f"""
-    <div class="kanban-card" style="border-top-color: {config['color'].replace('3px solid ', '')};">
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-            <div>
-                <div style="font-family: 'Courier New', monospace; font-weight: 700; font-size: 14px; color: {config['color']}; margin-bottom: 4px;">
-                    {config['icon']} {orden.get('Número Orden', 'N/A')}
-                </div>
-                <div style="font-size: 12px; color: #6C757D; background: {config['bg_color']}; padding: 2px 8px; border-radius: 12px; display: inline-block;">
-                    {orden['Estado_Kanban']}
-                </div>
-            </div>
-            <div style="font-size: 12px; color: #495057; background: #F1F3F5; padding: 4px 8px; border-radius: 6px; font-weight: 500;">
-                {fecha_str}
-            </div>
-        </div>
+    # Crear contenedor con borde
+    with st.container():
+        # Borde superior de la tarjeta
+        st.markdown(
+            f"""<div style='height: 4px; background-color: {config['border_color']}; 
+                 border-radius: 2px 2px 0 0; margin: 0 -1rem;'></div>""", 
+            unsafe_allow_html=True
+        )
         
-        <!-- Cliente -->
-        <div style="font-weight: 600; font-size: 16px; color: #212529; margin: 5px 0; line-height: 1.3;">
-            {cliente}
-        </div>
+        # Contenido de la tarjeta
+        col_header = st.columns([3, 1])
+        with col_header[0]:
+            # Número de orden con icono
+            st.markdown(f"**{config['icon']} {orden.get('Número Orden', 'N/A')}**")
+            # Estado
+            st.markdown(
+                f"""<div style='background-color: {config['bg_color']}; color: {config['color']}; 
+                     padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 0.8em;'>
+                     {estado_kanban}</div>""", 
+                unsafe_allow_html=True
+            )
+        with col_header[1]:
+            # Fecha
+            st.caption(fecha_str)
         
-        <!-- Diseño -->
-        <div style="font-size: 13px; color: #495057; margin: 8px 0; line-height: 1.4;">
-            <span style="color: #868E96; font-weight: 500;">Diseño:</span><br>
-            {diseño}
-        </div>
+        # Separador
+        st.markdown("---")
         
-        <!-- Footer -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 10px; border-top: 1px solid #E9ECEF;">
-            <div style="font-size: 11px; color: #868E96;">
-                {vendedor}
-            </div>
-            <div style="font-size: 11px; color: #868E96;">
-                {orden.get('Prendas', '0')} prendas
-            </div>
-        </div>
-    </div>
-    """
-    return html
+        # Información principal
+        st.markdown(f"**{orden.get('Cliente', 'Cliente no especificado')}**")
+        
+        # Diseño
+        diseño = orden.get('Nombre Diseño', 'Sin nombre')
+        if len(str(diseño)) > 40:
+            diseño = str(diseño)[:40] + "..."
+        st.caption(f"**Diseño:** {diseño}")
+        
+        # Información adicional
+        col_footer = st.columns(2)
+        with col_footer[0]:
+            vendedor = orden.get('Vendedor', 'Sin vendedor')
+            if len(str(vendedor)) > 15:
+                vendedor = str(vendedor)[:15] + "..."
+            st.caption(f"👤 {vendedor}")
+        with col_footer[1]:
+            prendas = orden.get('Prendas', '0')
+            st.caption(f"👕 {prendas} prendas")
+    
+    # Espaciado entre tarjetas
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
-def mostrar_kanban_horizontal(df):
-    """Mostrar el Kanban mejorado con diseño horizontal"""
+def mostrar_kanban_streamlit(df):
+    """Mostrar Kanban usando solo componentes nativos de Streamlit"""
     
-    # Asegurarnos de que tenemos la columna Estado_Kanban
-    if 'Estado_Kanban' not in df.columns:
+    # Agregar columna Estado_Kanban si no existe
+    if 'Estado' in df.columns:
         df['Estado_Kanban'] = df['Estado'].apply(normalizar_estado_kanban)
+    elif 'Estado_Kanban' not in df.columns:
+        df['Estado_Kanban'] = 'Pendiente'
     
-    # Definir el orden de las columnas
-    estados_orden = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
+    # Estados en orden
+    estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
     
-    # Inyectar CSS primero
-    inject_kanban_css()
+    # CSS mínimo pero efectivo
+    st.markdown("""
+    <style>
+    div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border-left: 4px solid;
+    }
     
-    # Crear columnas usando st.columns() de Streamlit para mejor control
-    st.markdown('<div class="kanban-container">', unsafe_allow_html=True)
+    div.stColumn {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
     
-    # Usar st.columns para crear el layout horizontal
-    columns = st.columns(4)
+    .kanban-header {
+        font-size: 1.1em;
+        font-weight: bold;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    for idx, estado in enumerate(estados_orden):
-        with columns[idx]:
+    # Crear 4 columnas horizontales
+    cols = st.columns(4)
+    
+    for idx, estado in enumerate(estados):
+        with cols[idx]:
             # Filtrar órdenes para este estado
             ordenes_estado = df[df['Estado_Kanban'] == estado]
-            config = get_config_estado(estado)
+            config = get_color_estado(estado)
             
-            # Crear la cabecera de la columna
-            col_html_header = f"""
-            <div class="column-header" style="border-top: {config['border']};">
-                <div class="column-title">
-                    <span style="color: {config['color']};">
-                        {config['icon']} {estado}
-                    </span>
-                    <span class="column-count">{len(ordenes_estado)}</span>
-                </div>
-                <div class="column-subtitle">
-                    {len(ordenes_estado)} orden{'' if len(ordenes_estado) == 1 else 'es'}
-                </div>
-            </div>
-            """
+            # Cabecera de la columna
+            st.markdown(
+                f"""<div class='kanban-header' style='background-color: {config['bg_color']}; 
+                     color: {config['color']}; border-bottom: 3px solid {config['border_color']};'>
+                     {config['icon']} {estado} ({len(ordenes_estado)})</div>""", 
+                unsafe_allow_html=True
+            )
             
-            st.markdown(col_html_header, unsafe_allow_html=True)
-            
-            # Contenedor para las tarjetas
-            st.markdown('<div class="cards-container">', unsafe_allow_html=True)
-            
+            # Mostrar tarjetas
             if ordenes_estado.empty:
-                st.markdown('<div class="empty-column">Sin órdenes en este estado</div>', unsafe_allow_html=True)
+                st.info("No hay órdenes", icon="📭")
             else:
-                # Ordenar por fecha de entrega (más urgente primero)
+                # Ordenar por fecha si existe
                 if 'Fecha Entrega' in ordenes_estado.columns:
                     try:
                         ordenes_estado = ordenes_estado.sort_values('Fecha Entrega', na_position='last')
@@ -368,218 +248,147 @@ def mostrar_kanban_horizontal(df):
                 
                 # Mostrar cada tarjeta
                 for _, orden in ordenes_estado.iterrows():
-                    tarjeta_html = crear_tarjeta_kanban(orden)
-                    st.markdown(tarjeta_html, unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+                    crear_tarjeta_orden(orden, estado)
 
-# ============================================================================
-# FUNCIONES ORIGINALES (MANTENIDAS)
-# ============================================================================
-def get_color_estado(estado):
-    """Devuelve colores para cada estado (para compatibilidad)"""
-    colores = {
-        'Pendiente Confirmación': {'color': '#FF6B6B', 'bg_color': '#FFE8E8'},
-        'Pendiente': {'color': '#D63031', 'bg_color': '#FFE8E8'},
-        'Confirmado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
-        'En Proceso': {'color': '#E17055', 'bg_color': '#FFF8E1'},
-        'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'}
-    }
-    return colores.get(estado, colores['Pendiente'])
-
-def mostrar_kanban_visual(df_filtrado):
-    """Versión original del Kanban - mantenida por compatibilidad"""
-    st.subheader("🎯 Tablero Kanban Visual")
+def mostrar_resumen_estadisticas(df):
+    """Mostrar resumen estadístico"""
+    if 'Estado_Kanban' not in df.columns:
+        df['Estado_Kanban'] = df['Estado'].apply(normalizar_estado_kanban) if 'Estado' in df.columns else 'Pendiente'
     
-    # Estadísticas rápidas
     col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        total = len(df_filtrado)
-        st.metric("Total", total)
-    with col2:
-        pendientes = len(df_filtrado[df_filtrado['Estado'] == 'Pendiente'])
-        st.metric("Pendientes", pendientes)
-    with col3:
-        en_proceso = len(df_filtrado[df_filtrado['Estado'] == 'En Proceso'])
-        st.metric("En Proceso", en_proceso)
-    with col4:
-        completadas = len(df_filtrado[df_filtrado['Estado'] == 'Completado'])
-        st.metric("Completadas", completadas)
     
-    # Definir columnas del Kanban
-    estados_kanban = ['Pendiente', 'En Proceso', 'Completado']
-    columns = st.columns(len(estados_kanban))
+    estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
+    configs = [get_color_estado(e) for e in estados]
+    counts = [len(df[df['Estado_Kanban'] == e]) for e in estados]
     
-    for i, estado in enumerate(estados_kanban):
-        with columns[i]:
-            color_estado = get_color_estado(estado)
-            
-            # Header de la columna
+    for i, (estado, config, count) in enumerate(zip(estados, configs, counts)):
+        with [col1, col2, col3, col4][i]:
+            # Usar st.metric con HTML personalizado
             st.markdown(
-                f"<div style='background-color: {color_estado['color']}; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 16px;'>"
-                f"{estado} ({len(df_filtrado[df_filtrado['Estado'] == estado])})"
-                f"</div>", 
+                f"""
+                <div style='
+                    background-color: {config['bg_color']};
+                    padding: 15px;
+                    border-radius: 10px;
+                    border-top: 3px solid {config['border_color']};
+                    text-align: center;
+                '>
+                    <div style='font-size: 24px; font-weight: bold; color: {config['color']};'>
+                        {count}
+                    </div>
+                    <div style='font-size: 14px; color: {config['color']};'>
+                        {config['icon']} {estado}
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True
             )
-            
-            # Ordenes en este estado
-            ordenes_estado = df_filtrado[df_filtrado['Estado'] == estado]
-
-def mostrar_vista_tabla(df_filtrado):
-    """Muestra la vista de tabla tradicional"""
-    st.subheader("📋 Vista de Tabla Detallada")
-    
-    columnas_mostrar = [
-        'Número Orden', 'Cliente', 'Vendedor', 'Fecha Entrega', 
-        'Estado', 'Prendas', 'Nombre Diseño', 'Medidas Bordado', 'Tipo Hilos'
-    ]
-    
-    columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
-    df_vista = df_filtrado[columnas_existentes]
-    
-    st.dataframe(
-        df_vista,
-        use_container_width=True,
-        hide_index=True
-    )
-
-def mostrar_estadisticas(df_filtrado):
-    """Muestra gráficas y estadísticas avanzadas"""
-    st.subheader("📊 Estadísticas Avanzadas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        conteo_estados = df_filtrado['Estado'].value_counts()
-        if not conteo_estados.empty:
-            fig_estados = px.pie(
-                values=conteo_estados.values,
-                names=conteo_estados.index,
-                title="Distribución de Estados",
-                color=conteo_estados.index,
-                color_discrete_map={
-                    'Pendiente': '#FF6B6B',
-                    'En Proceso': '#FDCB6E',
-                    'Completado': '#00B894'
-                }
-            )
-            st.plotly_chart(fig_estados, use_container_width=True)
-    
-    with col2:
-        if 'Vendedor' in df_filtrado.columns:
-            conteo_vendedores = df_filtrado['Vendedor'].value_counts().head(10)
-            if not conteo_vendedores.empty:
-                fig_vendedores = px.bar(
-                    x=conteo_vendedores.values,
-                    y=conteo_vendedores.index,
-                    orientation='h',
-                    title="Órdenes por Vendedor (Top 10)",
-                    color=conteo_vendedores.values,
-                    color_continuous_scale='Blues'
-                )
-                fig_vendedores.update_layout(showlegend=False)
-                st.plotly_chart(fig_vendedores, use_container_width=True)
 
 # ============================================================================
-# DASHBOARD PRINCIPAL - VERSIÓN SIMPLIFICADA
+# DASHBOARD PRINCIPAL
 # ============================================================================
 def mostrar_dashboard_ordenes():
-    """Dashboard principal enfocado en el Kanban mejorado"""
+    """Dashboard principal enfocado en visualización Kanban"""
     
-    st.title("🏭 Tablero de Producción - Órdenes de Bordado")
+    st.title("🏭 Tablero de Producción")
+    st.markdown("---")
     
     # Estado de conexión
-    with st.expander("🔗 Estado del Sistema", expanded=False):
+    with st.expander("🔗 Estado de Conexión", expanded=False):
         if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
             st.success("✅ Conectado a Google Sheets")
         else:
             st.error("❌ Configuración incompleta")
     
     # Cargar órdenes
-    with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
+    with st.spinner("🔄 Cargando órdenes..."):
         df_ordenes = obtener_ordenes()
     
     if df_ordenes.empty:
         st.info("📭 No hay órdenes registradas aún.")
         return
     
-    # Resumen de estadísticas
-    st.subheader("📊 Resumen General")
+    # Mostrar resumen
+    st.subheader("📊 Resumen por Estado")
+    mostrar_resumen_estadisticas(df_ordenes)
     
-    # Asegurar que tenemos Estado_Kanban
-    if 'Estado_Kanban' not in df_ordenes.columns:
-        df_ordenes['Estado_Kanban'] = df_ordenes['Estado'].apply(normalizar_estado_kanban)
-    
-    # Mostrar métricas por estado
-    cols = st.columns(4)
-    estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
-    
-    for idx, estado in enumerate(estados):
-        with cols[idx]:
-            count = len(df_ordenes[df_ordenes['Estado_Kanban'] == estado])
-            config = get_config_estado(estado)
-            
-            # Usar st.metric para mejor integración con Streamlit
-            st.metric(
-                label=f"{config['icon']} {estado}",
-                value=count,
-                delta=None
-            )
-    
-    # Filtros simples
+    # Filtros
     st.markdown("---")
     st.subheader("🎛️ Filtros")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        # Filtro por estado
-        estados_disponibles = ["Todos"] + list(df_ordenes['Estado_Kanban'].unique())
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        # Preparar estados para filtro
+        if 'Estado' in df_ordenes.columns:
+            df_ordenes['Estado_Kanban_temp'] = df_ordenes['Estado'].apply(normalizar_estado_kanban)
+        elif 'Estado_Kanban' not in df_ordenes.columns:
+            df_ordenes['Estado_Kanban_temp'] = 'Pendiente'
+        else:
+            df_ordenes['Estado_Kanban_temp'] = df_ordenes['Estado_Kanban']
+        
+        estados_unicos = ["Todos"] + sorted(df_ordenes['Estado_Kanban_temp'].unique().tolist())
         filtro_estado = st.selectbox(
             "Filtrar por estado:",
-            estados_disponibles,
-            key="filtro_estado_kanban"
+            estados_unicos,
+            key="filtro_estado_main"
         )
     
-    with col2:
+    with col_f2:
         # Filtro por vendedor
-        vendedores = ["Todos"] + list(df_ordenes['Vendedor'].dropna().unique())
+        vendedores = ["Todos"] + sorted(df_ordenes['Vendedor'].dropna().unique().tolist())
         filtro_vendedor = st.selectbox(
             "Filtrar por vendedor:",
             vendedores,
-            key="filtro_vendedor_kanban"
+            key="filtro_vendedor_main"
         )
     
     # Aplicar filtros
     df_filtrado = df_ordenes.copy()
+    
     if filtro_estado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Estado_Kanban'] == filtro_estado]
+        if 'Estado_Kanban_temp' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['Estado_Kanban_temp'] == filtro_estado]
+    
     if filtro_vendedor != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Vendedor'] == filtro_vendedor]
     
-    # Mostrar Kanban mejorado
+    # Limpiar columna temporal
+    if 'Estado_Kanban_temp' in df_filtrado.columns:
+        df_filtrado = df_filtrado.drop(columns=['Estado_Kanban_temp'])
+    
+    # Mostrar Kanban
     st.markdown("---")
-    st.markdown(f"### 🎯 Tablero Kanban ({len(df_filtrado)} órdenes)")
+    st.subheader(f"🎯 Tablero Kanban ({len(df_filtrado)} órdenes)")
     
-    # Mostrar el Kanban horizontal
-    mostrar_kanban_horizontal(df_filtrado)
+    mostrar_kanban_streamlit(df_filtrado)
     
-    # Opciones adicionales
+    # Botones de acción
     st.markdown("---")
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
     
-    with col_btn1:
+    col_b1, col_b2, col_b3 = st.columns(3)
+    
+    with col_b1:
         if st.button("🔄 Actualizar Datos", use_container_width=True):
+            st.cache_data.clear()
             st.rerun()
     
-    with col_btn2:
-        with st.expander("📋 Ver Datos en Tabla", expanded=False):
-            columnas_simples = ['Número Orden', 'Cliente', 'Estado_Kanban', 'Fecha Entrega', 'Vendedor', 'Prendas']
-            columnas_existentes = [c for c in columnas_simples if c in df_ordenes.columns]
-            st.dataframe(df_ordenes[columnas_existentes], use_container_width=True)
+    with col_b2:
+        if st.button("📋 Ver en Tabla", use_container_width=True):
+            with st.expander("📋 Vista de Tabla", expanded=True):
+                columnas = ['Número Orden', 'Cliente', 'Vendedor', 'Fecha Entrega', 'Estado']
+                columnas_existentes = [c for c in columnas if c in df_ordenes.columns]
+                if columnas_existentes:
+                    st.dataframe(df_ordenes[columnas_existentes], use_container_width=True)
     
-    with col_btn3:
-        if st.button("📊 Mostrar Estadísticas", use_container_width=True):
-            with st.expander("📈 Estadísticas Detalladas", expanded=True):
-                mostrar_estadisticas(df_filtrado)
+    with col_b3:
+        if st.button("ℹ️ Información", use_container_width=True):
+            st.info("""
+            **Información del Tablero:**
+            
+            • **Pendiente** ⏱️: Órdenes por iniciar
+            • **En Proceso** ⚙️: Órdenes en producción
+            • **Listo** ✅: Órdenes terminadas
+            • **Entregado** 📦: Órdenes finalizadas
+            
+            Los datos se actualizan automáticamente desde Google Sheets.
+            """)
