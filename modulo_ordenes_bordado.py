@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # ============================================================================
-# CONFIGURACIÓN DE GOOGLE SHEETS
+# CONFIGURACIÓN DE GOOGLE SHEETS (igual que antes)
 # ============================================================================
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -13,7 +13,7 @@ SCOPE = [
 ]
 
 def conectar_google_sheets():
-    """Conectar con Google Sheets usando credenciales existentes"""
+    """Conectar con Google Sheets usando tus credenciales existentes"""
     try:
         creds_dict = {
             "type": st.secrets["gservice_account"]["type"],
@@ -47,6 +47,9 @@ def obtener_ordenes():
             data = sheet.get_all_records()
             if data:
                 df = pd.DataFrame(data)
+                if 'Estado' not in df.columns:
+                    st.warning("⚠️ Columna 'Estado' no encontrada.")
+                    df['Estado'] = 'Pendiente'
                 return df
             else:
                 return pd.DataFrame()
@@ -56,276 +59,254 @@ def obtener_ordenes():
     return pd.DataFrame()
 
 # ============================================================================
-# KANBAN CORREGIDO - ENFOQUE DIRECTO
+# FUNCIONES DEL KANBAN MEJORADO
 # ============================================================================
-def normalizar_estado(estado):
-    """Normalizar el estado a 4 categorías"""
-    if pd.isna(estado):
-        return 'Pendiente'
-    
-    estado_str = str(estado).lower().strip()
-    
-    if 'pendiente' in estado_str:
-        return 'Pendiente'
-    elif 'proceso' in estado_str or 'producción' in estado_str or 'produccion' in estado_str:
-        return 'En Proceso'
-    elif 'listo' in estado_str or 'completado' in estado_str or 'terminado' in estado_str:
-        return 'Listo'
-    elif 'entregado' in estado_str or 'finalizado' in estado_str:
-        return 'Entregado'
-    else:
-        return 'Pendiente'
+def get_color_estado(estado):
+    """Devuelve colores para cada estado"""
+    estado = str(estado).strip()
+    colores = {
+        'Pendiente Confirmación': {'color': '#FF6B6B', 'bg_header': '#FFE8E8', 'bg_card': '#FFFFFF', 'border': '#FF6B6B'},
+        'Pendiente': {'color': '#D63031', 'bg_header': '#FFE8E8', 'bg_card': '#FFFFFF', 'border': '#D63031'},
+        'Confirmado': {'color': '#00A085', 'bg_header': '#E8F6F3', 'bg_card': '#FFFFFF', 'border': '#00A085'},
+        'En Proceso': {'color': '#E17055', 'bg_header': '#FFF8E1', 'bg_card': '#FFFFFF', 'border': '#E17055'},
+        'Completado': {'color': '#00A085', 'bg_header': '#E8F6F3', 'bg_card': '#FFFFFF', 'border': '#00A085'},
+        'Listo': {'color': '#198754', 'bg_header': '#E8F5E9', 'bg_card': '#FFFFFF', 'border': '#198754'},
+        'Entregado': {'color': '#6F42C1', 'bg_header': '#F3E8FF', 'bg_card': '#FFFFFF', 'border': '#6F42C1'}
+    }
+    return colores.get(estado, {'color': '#6C757D', 'bg_header': '#F8F9FA', 'bg_card': '#FFFFFF', 'border': '#6C757D'})
 
-def mostrar_kanban_corregido(df):
-    """Kanban con HTML bien formado"""
+def crear_tarjeta_mejorada(orden):
+    """Crea una tarjeta mejorada con mejor separación visual"""
+    estado = orden.get('Estado', 'Pendiente')
+    color_estado = get_color_estado(estado)
     
-    # Agregar estado normalizado
-    df['Estado_Kanban'] = df['Estado'].apply(normalizar_estado) if 'Estado' in df.columns else 'Pendiente'
-    
-    # Estados en orden
-    estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
-    
-    # CSS en bloque separado
-    css_html = """
-    <style>
-    /* Contenedor principal horizontal */
-    .kanban-horizontal {
-        display: flex;
-        gap: 15px;
-        overflow-x: auto;
-        padding: 10px 0;
-        margin-bottom: 20px;
-    }
-    
-    /* Columna individual */
-    .kanban-col {
-        flex: 1;
-        min-width: 300px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 0;
-    }
-    
-    /* Cabecera de columna */
-    .col-header {
-        padding: 12px 15px;
-        font-weight: bold;
-        border-bottom: 2px solid;
-        border-radius: 8px 8px 0 0;
-        margin-bottom: 10px;
-        font-size: 16px;
-    }
-    
-    /* Tarjeta de orden */
-    .orden-card {
-        background: white;
-        margin: 10px 15px;
-        padding: 15px;
-        border-radius: 6px;
-        border-left: 4px solid;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        margin-bottom: 12px;
-    }
-    
-    /* Colores por estado */
-    .pendiente { border-left-color: #6c757d; }
-    .en-proceso { border-left-color: #0d6efd; }
-    .listo { border-left-color: #198754; }
-    .entregado { border-left-color: #6f42c1; }
-    
-    .header-pendiente { background: #f8f9fa; color: #6c757d; border-color: #6c757d; }
-    .header-proceso { background: #e8f4fd; color: #0d6efd; border-color: #0d6efd; }
-    .header-listo { background: #e8f5e9; color: #198754; border-color: #198754; }
-    .header-entregado { background: #f3e8ff; color: #6f42c1; border-color: #6f42c1; }
-    </style>
-    """
-    
-    # Inyectar CSS primero
-    st.markdown(css_html, unsafe_allow_html=True)
-    
-    # Construir el HTML completo en una sola variable
-    kanban_html = '<div class="kanban-horizontal">'
-    
-    for estado in estados:
-        # Filtrar órdenes para este estado
-        ordenes = df[df['Estado_Kanban'] == estado]
-        
-        # Determinar clase CSS
-        estado_class = estado.lower().replace(' ', '-')
-        header_class = f"header-{estado_class}"
-        
-        # Crear columna
-        kanban_html += f'''
-        <div class="kanban-col">
-            <div class="col-header {header_class}">
-                {estado} ({len(ordenes)})
-            </div>
-        '''
-        
-        # Si no hay órdenes
-        if ordenes.empty:
-            kanban_html += '''
-            <div style="text-align: center; padding: 30px 20px; color: #999; font-style: italic;">
-                Sin órdenes
-            </div>
-            '''
-        else:
-            # Ordenar por fecha si existe
-            if 'Fecha Entrega' in ordenes.columns:
-                try:
-                    ordenes = ordenes.sort_values('Fecha Entrega', na_position='last')
-                except:
-                    pass
-            
-            # Agregar cada tarjeta
-            for _, orden in ordenes.iterrows():
-                # Formatear información
-                num_orden = orden.get('Número Orden', 'N/A')
-                cliente = str(orden.get('Cliente', 'Sin cliente'))[:25]
-                if len(str(orden.get('Cliente', ''))) > 25:
-                    cliente += "..."
-                
-                diseño = str(orden.get('Nombre Diseño', 'Sin diseño'))[:30]
-                if len(str(orden.get('Nombre Diseño', ''))) > 30:
-                    diseño += "..."
-                
-                fecha = orden.get('Fecha Entrega', '')
-                fecha_str = 'Sin fecha'
-                if pd.notna(fecha) and fecha != '':
-                    try:
-                        if isinstance(fecha, datetime):
-                            fecha_str = fecha.strftime('%d/%m')
-                        else:
-                            fecha_str = str(fecha)[:10]
-                    except:
-                        fecha_str = str(fecha)
-                
-                vendedor = str(orden.get('Vendedor', ''))[:15]
-                if vendedor == '':
-                    vendedor = 'No asignado'
-                
-                prendas = orden.get('Prendas', '0')
-                
-                # Crear tarjeta
-                kanban_html += f'''
-                <div class="orden-card {estado_class}">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div style="font-weight: bold; color: #333;">{num_orden}</div>
-                        <div style="font-size: 12px; color: #666; background: #f1f3f5; padding: 2px 8px; border-radius: 10px;">{fecha_str}</div>
-                    </div>
-                    
-                    <div style="font-size: 14px; font-weight: 600; margin: 8px 0; color: #212529;">{cliente}</div>
-                    
-                    <div style="font-size: 12px; color: #495057; margin-bottom: 8px;">
-                        <strong>Diseño:</strong> {diseño}
-                    </div>
-                    
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d;">
-                        <div>👤 {vendedor}</div>
-                        <div>👕 {prendas} prendas</div>
-                    </div>
+    # Crear un contenedor con borde y sombra
+    with st.container():
+        # Encabezado de la tarjeta (color diferente)
+        st.markdown(
+            f"""<div style='
+                background-color: {color_estado['bg_header']};
+                padding: 12px;
+                border-radius: 8px 8px 0 0;
+                border-top: 3px solid {color_estado['border']};
+                margin: 0 -1rem;
+            '>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-weight: bold; font-size: 14px;">📦 {orden.get('Número Orden', 'N/A')}</div>
+                    <div style='
+                        background-color: {color_estado['color']};
+                        color: white;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        font-size: 11px;
+                        font-weight: bold;
+                    '>{estado}</div>
                 </div>
-                '''
+            </div>""", 
+            unsafe_allow_html=True
+        )
         
-        kanban_html += '</div>'
-    
-    kanban_html += '</div>'
-    
-    # Mostrar TODO el HTML de una vez
-    st.markdown(kanban_html, unsafe_allow_html=True)
+        # Cuerpo de la tarjeta (fondo blanco)
+        st.markdown(
+            f"""<div style='
+                background-color: {color_estado['bg_card']};
+                padding: 15px;
+                margin: 0 -1rem;
+                border-radius: 0 0 8px 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                margin-bottom: 15px;
+            '>""", 
+            unsafe_allow_html=True
+        )
+        
+        # Cliente (destacado)
+        st.markdown(f"**{orden.get('Cliente', 'Cliente no especificado')}**")
+        
+        # Información en 2 columnas
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            vendedor = orden.get('Vendedor', 'No especificado')
+            st.caption(f"👤 **{vendedor[:20]}{'...' if len(vendedor) > 20 else ''}**")
+        with col_info2:
+            fecha = orden.get('Fecha Entrega', 'No especificada')
+            st.caption(f"📅 **{str(fecha)[:10] if fecha else 'Sin fecha'}**")
+        
+        # Diseño
+        diseño = orden.get('Nombre Diseño', 'Sin nombre')
+        st.caption(f"🎨 **Diseño:** {diseño[:30]}{'...' if len(diseño) > 30 else ''}")
+        
+        # Prendas (en un recuadro)
+        prendas = orden.get('Prendas', 'No especificadas')
+        st.markdown(
+            f"""<div style='
+                background-color: #F8F9FA;
+                padding: 8px;
+                border-radius: 6px;
+                margin-top: 10px;
+                text-align: center;
+                border-left: 3px solid {color_estado['border']};
+            '>
+                <span style='font-size: 12px; color: #495057; font-weight: bold;'>{prendas}</span>
+            </div>""", 
+            unsafe_allow_html=True
+        )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# ============================================================================
-# DASHBOARD PRINCIPAL - VERSIÓN FINAL CORREGIDA
-# ============================================================================
-def mostrar_dashboard_ordenes():
-    """Dashboard principal - Solo Kanban limpio"""
+def mostrar_kanban_mejorado(df_filtrado):
+    """Muestra el tablero Kanban mejorado"""
+    st.subheader("🎯 Tablero Kanban de Producción")
     
-    st.title("📋 Tablero de Órdenes de Bordado")
+    # Estadísticas rápidas
+    col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
+    
+    with col_stats1:
+        total = len(df_filtrado)
+        st.metric("Total Órdenes", total)
+    
+    with col_stats2:
+        pendientes = len(df_filtrado[df_filtrado['Estado'] == 'Pendiente'])
+        st.metric("Pendientes", pendientes, delta=None)
+    
+    with col_stats3:
+        en_proceso = len(df_filtrado[df_filtrado['Estado'] == 'En Proceso'])
+        st.metric("En Proceso", en_proceso, delta=None)
+    
+    with col_stats4:
+        completadas = len(df_filtrado[df_filtrado['Estado'].isin(['Completado', 'Listo', 'Entregado'])])
+        st.metric("Completadas", completadas, delta=None)
+    
     st.markdown("---")
     
-    # Cargar datos
+    # Definir estados para el Kanban (basado en datos reales)
+    estados_posibles = ['Pendiente', 'En Proceso', 'Completado', 'Listo', 'Entregado']
+    estados_existentes = [e for e in estados_posibles if e in df_filtrado['Estado'].unique()]
+    
+    # Si no hay estados de la lista, usar los que existen
+    if not estados_existentes:
+        estados_existentes = df_filtrado['Estado'].unique().tolist()
+    
+    # Limitar a máximo 4 columnas
+    estados_existentes = estados_existentes[:4]
+    
+    # Crear columnas del Kanban
+    columns = st.columns(len(estados_existentes))
+    
+    for i, estado in enumerate(estados_existentes):
+        with columns[i]:
+            color_estado = get_color_estado(estado)
+            
+            # Header de la columna
+            st.markdown(
+                f"""<div style='
+                    background-color: {color_estado['bg_header']};
+                    color: {color_estado['color']};
+                    padding: 15px;
+                    border-radius: 10px;
+                    text-align: center;
+                    margin-bottom: 20px;
+                    font-weight: bold;
+                    font-size: 16px;
+                    border-bottom: 3px solid {color_estado['border']};
+                '>
+                    {estado} ({len(df_filtrado[df_filtrado['Estado'] == estado])})
+                </div>""", 
+                unsafe_allow_html=True
+            )
+            
+            # Órdenes en este estado
+            ordenes_estado = df_filtrado[df_filtrado['Estado'] == estado]
+            
+            if ordenes_estado.empty:
+                st.markdown(
+                    """<div style='
+                        background-color: #F8F9FA;
+                        padding: 30px;
+                        border-radius: 8px;
+                        text-align: center;
+                        color: #6C757D;
+                        font-style: italic;
+                        border: 2px dashed #DEE2E6;
+                        margin: 10px 0;
+                    '>
+                        No hay órdenes
+                    </div>""", 
+                    unsafe_allow_html=True
+                )
+            else:
+                # Ordenar por fecha de entrega si existe
+                if 'Fecha Entrega' in ordenes_estado.columns:
+                    try:
+                        ordenes_estado = ordenes_estado.sort_values('Fecha Entrega', na_position='last')
+                    except:
+                        pass
+                
+                # Espaciado entre tarjetas
+                st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+                
+                for _, orden in ordenes_estado.iterrows():
+                    crear_tarjeta_mejorada(orden)
+                    # Espaciado entre tarjetas
+                    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+
+# ============================================================================
+# DASHBOARD PRINCIPAL - SOLO KANBAN MEJORADO
+# ============================================================================
+def mostrar_dashboard_ordenes():
+    """Dashboard principal - Solo Kanban mejorado"""
+    
+    st.title("🏭 Tablero de Producción - Órdenes de Bordado")
+    
+    # Información de conexión (colapsada)
+    with st.expander("🔗 Estado de Conexión", expanded=False):
+        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
+            st.success("✅ Conectado a Google Sheets")
+        else:
+            st.error("❌ Configuración incompleta")
+    
+    # Cargar órdenes
     with st.spinner("🔄 Cargando órdenes..."):
         df_ordenes = obtener_ordenes()
     
     if df_ordenes.empty:
-        st.info("📭 No hay órdenes registradas.")
+        st.info("📭 No hay órdenes registradas aún.")
         return
     
-    # Resumen rápido
-    if 'Estado' in df_ordenes.columns:
-        df_ordenes['Estado_Simple'] = df_ordenes['Estado'].apply(normalizar_estado)
-    else:
-        df_ordenes['Estado_Simple'] = 'Pendiente'
+    # Filtros globales
+    st.subheader("🎛️ Filtros")
+    col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
     
-    # Mostrar contadores
-    st.subheader("📊 Resumen")
+    with col_filtro1:
+        estados = ["Todos"] + list(df_ordenes['Estado'].unique())
+        estado_filtro = st.selectbox("Por Estado:", estados, key="filtro_estado")
     
-    col1, col2, col3, col4 = st.columns(4)
+    with col_filtro2:
+        vendedores = ["Todos"] + list(df_ordenes['Vendedor'].dropna().unique())
+        vendedor_filtro = st.selectbox("Por Vendedor:", vendedores, key="filtro_vendedor")
     
-    estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
-    colores = ['#6c757d', '#0d6efd', '#198754', '#6f42c1']
-    iconos = ['⏱️', '⚙️', '✅', '📦']
-    
-    for i, (estado, color, icono) in enumerate(zip(estados, colores, iconos)):
-        with [col1, col2, col3, col4][i]:
-            count = len(df_ordenes[df_ordenes['Estado_Simple'] == estado])
-            st.markdown(f"""
-            <div style="text-align: center; padding: 15px; background-color: white; 
-                        border-radius: 10px; border-top: 3px solid {color}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <div style="font-size: 28px; font-weight: bold; color: {color};">{count}</div>
-                <div style="font-size: 14px; color: #495057;">{icono} {estado}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Filtro simple
-    st.markdown("---")
-    
-    filtro_col1, filtro_col2 = st.columns(2)
-    
-    with filtro_col1:
-        estado_filtro = st.selectbox(
-            "Filtrar por estado:",
-            ["Todos"] + estados,
-            key="filtro_estado"
-        )
-    
-    with filtro_col2:
-        # Solo mostrar filtro de vendedor si hay datos
-        if 'Vendedor' in df_ordenes.columns:
-            vendedores = ["Todos"] + sorted(df_ordenes['Vendedor'].dropna().unique().tolist())
-            vendedor_filtro = st.selectbox(
-                "Filtrar por vendedor:",
-                vendedores,
-                key="filtro_vendedor"
-            )
-        else:
-            vendedor_filtro = "Todos"
+    with col_filtro3:
+        clientes = ["Todos"] + list(df_ordenes['Cliente'].dropna().unique())
+        cliente_filtro = st.selectbox("Por Cliente:", clientes, key="filtro_cliente")
     
     # Aplicar filtros
     df_filtrado = df_ordenes.copy()
-    
     if estado_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Estado_Simple'] == estado_filtro]
-    
-    if vendedor_filtro != "Todos" and 'Vendedor' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['Estado'] == estado_filtro]
+    if vendedor_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Vendedor'] == vendedor_filtro]
+    if cliente_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
     
-    # Mostrar Kanban
+    # Mostrar Kanban mejorado
+    mostrar_kanban_mejorado(df_filtrado)
+    
+    # Botón de acción
     st.markdown("---")
-    st.subheader(f"🎯 Órdenes ({len(df_filtrado)})")
+    col_btn1, col_btn2 = st.columns([3, 1])
     
-    # Llamar a la función corregida
-    mostrar_kanban_corregido(df_filtrado)
+    with col_btn1:
+        st.info(f"📊 Mostrando {len(df_filtrado)} de {len(df_ordenes)} órdenes")
     
-    # Botón de actualización
-    if st.button("🔄 Actualizar Datos", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-    
-    # Estado de conexión (al final)
-    with st.expander("🔗 Información del Sistema", expanded=False):
-        if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
-            st.success("✅ Conectado a Google Sheets")
-            st.write(f"Órdenes cargadas: {len(df_ordenes)}")
-        else:
-            st.error("❌ Configuración incompleta")
+    with col_btn2:
+        if st.button("🔄 Actualizar Datos", use_container_width=True):
+            st.rerun()
