@@ -37,30 +37,65 @@ def conectar_google_sheets():
         st.error(f"❌ Error conectando con Google Sheets: {e}")
         return None
 
-def obtener_ordenes():
-    """Obtener todas las órdenes del Google Sheets"""
-    sheet = conectar_google_sheets()
-    if sheet:
+def obtener_ordenes_con_actualizacion(sheet):
+    """Obtener órdenes y actualizar automáticamente si es necesario"""
+    try:
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(data)
+        
+        # Verificar que las columnas necesarias existen
+        if 'Estado Producción' not in df.columns:
+            df['Estado Producción'] = 'Pendiente Aprobación'
+        if 'Estado Aprobación' not in df.columns:
+            df['Estado Aprobación'] = 'Pendiente'
+        
+        # ENCONTRAR LA COLUMNA DE ESTADO PRODUCCIÓN
+        headers = sheet.row_values(1)
         try:
-            data = sheet.get_all_records()
-            if data:
-                df = pd.DataFrame(data)
-                # Verificar que las columnas necesarias existen
-                if 'Estado Producción' not in df.columns:
-                    df['Estado Producción'] = 'Pendiente Aprobación'
-                if 'Estado Aprobación' not in df.columns:
-                    df['Estado Aprobación'] = 'Pendiente'
-                
-                # CREAR ESTADO KANBAN
-                df['Estado_Kanban'] = df.apply(crear_estado_kanban, axis=1)
-                
-                return df, sheet
+            col_produccion_index = headers.index('Estado Producción') + 1
+        except ValueError:
+            # Si no encuentra el nombre exacto, buscar similar
+            for i, header in enumerate(headers):
+                if 'producción' in header.lower() or 'produccion' in header.lower():
+                    col_produccion_index = i + 1
+                    break
             else:
-                return pd.DataFrame(), None
-        except Exception as e:
-            st.error(f"❌ Error obteniendo órdenes: {e}")
-            return pd.DataFrame(), None
-    return pd.DataFrame(), None
+                col_produccion_index = None
+        
+        # VERIFICAR Y ACTUALIZAR ORDENES APROBADAS
+        actualizaciones_realizadas = []
+        
+        for i, row in enumerate(data, start=2):
+            numero_orden = str(row.get('Número Orden', '')).strip()
+            aprobacion = str(row.get('Estado Aprobación', '')).strip()
+            produccion = str(row.get('Estado Producción', '')).strip()
+            
+            # LOGICA: Si está aprobado Y producción no está en estado avanzado
+            if (aprobacion == 'Aprobado' and 
+                produccion not in ['En Espera', 'En Proceso', 'Completado', 'Entregado'] and
+                col_produccion_index is not None):
+                
+                # Actualizar a "En Espera"
+                sheet.update_cell(i, col_produccion_index, 'En Espera')
+                actualizaciones_realizadas.append(numero_orden)
+        
+        # Si hubo actualizaciones, recargar datos
+        if actualizaciones_realizadas:
+            st.session_state['ultimas_actualizaciones'] = actualizaciones_realizadas
+            data = sheet.get_all_records()
+            df = pd.DataFrame(data)
+        
+        # CREAR ESTADO KANBAN
+        df['Estado_Kanban'] = df.apply(crear_estado_kanban, axis=1)
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"❌ Error obteniendo/actualizando órdenes: {e}")
+        return pd.DataFrame()
 
 def crear_estado_kanban(row):
     """Crear estado del Kanban según la lógica especificada"""
@@ -91,59 +126,6 @@ def crear_estado_kanban(row):
     else:
         return 'Pendiente Aprobación'
 
-def actualizar_estado_produccion(sheet, numero_orden, nuevo_estado):
-    """Actualizar el estado de producción en Google Sheets"""
-    try:
-        # Obtener todos los datos para encontrar la fila
-        data = sheet.get_all_records()
-        
-        # Encontrar la columna de "Estado Producción"
-        headers = sheet.row_values(1)
-        try:
-            col_index = headers.index('Estado Producción') + 1
-        except ValueError:
-            # Si no encuentra el nombre exacto, buscar similar
-            for i, header in enumerate(headers):
-                if 'producción' in header.lower() or 'produccion' in header.lower():
-                    col_index = i + 1
-                    break
-            else:
-                st.error("❌ No se encontró la columna 'Estado Producción'")
-                return False
-        
-        # Buscar la fila con el número de orden
-        for i, row in enumerate(data, start=2):
-            if str(row.get('Número Orden', '')).strip() == str(numero_orden).strip():
-                # Actualizar la celda
-                sheet.update_cell(i, col_index, nuevo_estado)
-                return True
-        
-        st.error(f"❌ No se encontró la orden: {numero_orden}")
-        return False
-        
-    except Exception as e:
-        st.error(f"❌ Error actualizando orden: {e}")
-        return False
-
-def verificar_y_actualizar_aprobados(df, sheet):
-    """Verificar órdenes aprobadas y actualizar su estado de producción si es necesario"""
-    actualizaciones = []
-    
-    for _, row in df.iterrows():
-        numero_orden = row['Número Orden']
-        aprobacion = str(row.get('Estado Aprobación', '')).strip()
-        produccion = str(row.get('Estado Producción', '')).strip()
-        
-        # Si está aprobado y su estado producción NO es "En Espera", "En Proceso", "Completado" o "Entregado"
-        if aprobacion == 'Aprobado' and produccion not in ['En Espera', 'En Proceso', 'Completado', 'Entregado']:
-            # Verificar que no sea "Pendiente Aprobación" (ese es el estado inicial)
-            if produccion != 'Pendiente Aprobación':
-                # Actualizar a "En Espera"
-                if actualizar_estado_produccion(sheet, numero_orden, 'En Espera'):
-                    actualizaciones.append(numero_orden)
-    
-    return actualizaciones
-
 def get_color_estado_kanban(estado):
     """Devuelve colores para cada estado del KANBAN"""
     colores = {
@@ -155,7 +137,7 @@ def get_color_estado_kanban(estado):
     }
     return colores.get(estado, {'color': '#95A5A6', 'bg_color': '#F2F4F4', 'icon': '❓'})
 
-def crear_tarjeta_streamlit(orden, sheet):
+def crear_tarjeta_streamlit(orden):
     """Crea una tarjeta usando solo componentes de Streamlit"""
     estado_kanban = orden.get('Estado_Kanban', 'Pendiente Aprobación')
     color_estado = get_color_estado_kanban(estado_kanban)
@@ -163,14 +145,13 @@ def crear_tarjeta_streamlit(orden, sheet):
     # Información de AMBAS columnas para mostrar
     estado_aprobacion = orden.get('Estado Aprobación', 'No especificado')
     estado_produccion = orden.get('Estado Producción', 'No especificado')
-    numero_orden = orden['Número Orden']
     
     # Crear un contenedor con estilo
     with st.container():
         # Header de la tarjeta - Mostrando ambos estados
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown(f"**{color_estado['icon']} {numero_orden}**")
+            st.markdown(f"**{color_estado['icon']} {orden['Número Orden']}**")
             st.markdown(f"### {orden['Cliente']}")
         with col2:
             # Estado Kanban (combinado)
@@ -204,29 +185,31 @@ def crear_tarjeta_streamlit(orden, sheet):
             unsafe_allow_html=True
         )
         
-        # BOTÓN PARA FORZAR ACTUALIZACIÓN SI ESTÁ APROBADO PERO NO EN ESPERA
-        if estado_aprobacion == 'Aprobado' and estado_produccion not in ['En Espera', 'En Proceso', 'Completado', 'Entregado']:
-            if st.button(f"🔄 Mover a 'En Espera'", key=f"btn_{numero_orden}", use_container_width=True):
-                with st.spinner(f"Actualizando {numero_orden}..."):
-                    if actualizar_estado_produccion(sheet, numero_orden, 'En Espera'):
-                        st.success(f"✅ {numero_orden} actualizado a 'En Espera'")
-                        st.rerun()
-        
         st.markdown("---")
 
-def mostrar_kanban_visual(df_filtrado, sheet):
+def mostrar_kanban_visual(df_filtrado):
     """Muestra el tablero Kanban"""
     st.subheader("🎯 Tablero Kanban de Producción")
     
-    # BOTÓN PARA ACTUALIZAR TODOS LOS APROBADOS
-    if st.button("🔄 Actualizar todos los aprobados a 'En Espera'", use_container_width=True):
-        with st.spinner("Verificando órdenes aprobadas..."):
-            actualizaciones = verificar_y_actualizar_aprobados(df_filtrado, sheet)
-            if actualizaciones:
-                st.success(f"✅ {len(actualizaciones)} órdenes actualizadas: {', '.join(actualizaciones[:5])}{'...' if len(actualizaciones) > 5 else ''}")
-                st.rerun()
-            else:
-                st.info("ℹ️ No hay órdenes aprobadas pendientes de actualizar")
+    # Mostrar actualizaciones recientes si las hay
+    if 'ultimas_actualizaciones' in st.session_state and st.session_state['ultimas_actualizaciones']:
+        actualizaciones = st.session_state['ultimas_actualizaciones']
+        if len(actualizaciones) > 0:
+            st.success(f"✅ Se actualizaron {len(actualizaciones)} órdenes a 'En Espera': {', '.join(actualizaciones[:3])}{'...' if len(actualizaciones) > 3 else ''}")
+            # Limpiar después de mostrar
+            st.session_state['ultimas_actualizaciones'] = []
+    
+    # Información sobre el flujo automático
+    with st.expander("ℹ️ Flujo Automático", expanded=False):
+        st.info("""
+        **Actualización automática:**
+        
+        Cuando una orden tiene **Estado Aprobación = "Aprobado"** y 
+        **Estado Producción** no es uno de los estados avanzados 
+        (En Proceso, Completado, Entregado), se actualiza automáticamente a **"En Espera"**.
+        
+        Esto sucede cada vez que cargas o actualizas el tablero.
+        """)
     
     # Definir el orden del flujo en el Kanban (5 estados)
     estados_kanban = [
@@ -286,7 +269,7 @@ def mostrar_kanban_visual(df_filtrado, sheet):
                         pass
                 
                 for _, orden in ordenes_estado.iterrows():
-                    crear_tarjeta_streamlit(orden, sheet)
+                    crear_tarjeta_streamlit(orden)
 
 def mostrar_dashboard_ordenes():
     """Dashboard principal de gestión de órdenes SOLO CON KANBAN"""
@@ -300,33 +283,30 @@ def mostrar_dashboard_ordenes():
         else:
             st.error("❌ Sheet ID no configurado")
     
-    # Cargar órdenes (ahora también devuelve el objeto sheet)
-    with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
-        df_ordenes, sheet = obtener_ordenes()
+    # Conectar a Google Sheets
+    sheet = conectar_google_sheets()
+    if sheet is None:
+        st.error("❌ No se pudo conectar a Google Sheets")
+        return
+    
+    # Cargar órdenes CON ACTUALIZACIÓN AUTOMÁTICA
+    with st.spinner("🔄 Cargando y verificando órdenes..."):
+        df_ordenes = obtener_ordenes_con_actualizacion(sheet)
     
     if df_ordenes.empty:
         st.info("📭 No hay órdenes registradas aún.")
         return
     
-    if sheet is None:
-        st.error("❌ No se pudo conectar a Google Sheets")
-        return
-    
     # Mostrar información de las columnas para debug (opcional)
     with st.expander("🔍 Ver estructura de datos", expanded=False):
-        st.write(f"**Columnas disponibles:** {list(df_ordenes.columns)}")
+        st.write(f"**Total de órdenes:** {len(df_ordenes)}")
         st.write(f"**Valores en 'Estado Aprobación':** {df_ordenes['Estado Aprobación'].unique()}")
         st.write(f"**Valores en 'Estado Producción':** {df_ordenes['Estado Producción'].unique()}")
         st.write(f"**Valores en 'Estado_Kanban':** {df_ordenes['Estado_Kanban'].unique()}")
         
-        # Mostrar órdenes que necesitan actualización
-        aprobados_pendientes = df_ordenes[
-            (df_ordenes['Estado Aprobación'] == 'Aprobado') & 
-            (~df_ordenes['Estado Producción'].isin(['En Espera', 'En Proceso', 'Completado', 'Entregado']))
-        ]
-        if not aprobados_pendientes.empty:
-            st.warning(f"⚠️ {len(aprobados_pendientes)} órdenes aprobadas necesitan actualización:")
-            st.dataframe(aprobados_pendientes[['Número Orden', 'Cliente', 'Estado Aprobación', 'Estado Producción']])
+        # Mostrar estadísticas
+        aprobados = df_ordenes[df_ordenes['Estado Aprobación'] == 'Aprobado']
+        st.write(f"**Órdenes aprobadas:** {len(aprobados)}")
     
     # Filtros globales
     st.subheader("🎛️ Filtros")
@@ -354,8 +334,8 @@ def mostrar_dashboard_ordenes():
     if cliente_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
     
-    # Mostrar Kanban (pasar el objeto sheet)
-    mostrar_kanban_visual(df_filtrado, sheet)
+    # Mostrar Kanban
+    mostrar_kanban_visual(df_filtrado)
     
     # Botones de acción
     st.markdown("---")
@@ -366,4 +346,7 @@ def mostrar_dashboard_ordenes():
     
     with col_btn2:
         if st.button("🔄 Actualizar Datos", use_container_width=True):
+            # Limpiar cache y recargar
+            if 'ultimas_actualizaciones' in st.session_state:
+                del st.session_state['ultimas_actualizaciones']
             st.rerun()
