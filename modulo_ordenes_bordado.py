@@ -13,7 +13,6 @@ SCOPE = [
 def conectar_google_sheets():
     """Conectar con Google Sheets usando tus credenciales existentes"""
     try:
-        # Usar las credenciales que ya tienes configuradas
         creds_dict = {
             "type": st.secrets["gservice_account"]["type"],
             "project_id": st.secrets["gservice_account"]["project_id"],
@@ -28,10 +27,7 @@ def conectar_google_sheets():
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         
-        # Obtener el ID del sheet desde secrets
         sheet_id = st.secrets["gsheets"]["ordenes_bordado_sheet_id"]
-        
-        # Abrir por ID (más confiable que por nombre)
         spreadsheet = client.open_by_key(sheet_id)
         sheet = spreadsheet.worksheet("OrdenesBordado")
         
@@ -49,10 +45,15 @@ def obtener_ordenes():
             data = sheet.get_all_records()
             if data:
                 df = pd.DataFrame(data)
-                # Verificar que la columna Estado existe
-                if 'Estado' not in df.columns:
-                    st.warning("⚠️ Columna 'Estado' no encontrada. Se agregará automáticamente.")
-                    df['Estado'] = 'Pendiente'
+                # Verificar que las columnas necesarias existen
+                if 'Estado Producción' not in df.columns:
+                    df['Estado Producción'] = 'Pendiente'
+                if 'Estado Aprobación' not in df.columns:
+                    df['Estado Aprobación'] = 'Pendiente'
+                
+                # CREAR ESTADO COMBINADO PARA EL KANBAN
+                df['Estado_Kanban'] = df.apply(crear_estado_combinado, axis=1)
+                
                 return df
             else:
                 return pd.DataFrame()
@@ -61,47 +62,81 @@ def obtener_ordenes():
             return pd.DataFrame()
     return pd.DataFrame()
 
-def get_color_estado(estado):
-    """Devuelve colores para cada estado"""
+def crear_estado_combinado(row):
+    """Crear un estado combinado basado en ambas columnas"""
+    aprobacion = str(row.get('Estado Aprobación', '')).strip().lower()
+    produccion = str(row.get('Estado Producción', '')).strip().lower()
+    
+    # Lógica para determinar el estado del Kanban
+    if 'entregado' in produccion:
+        return 'Entregado'
+    elif 'completado' in produccion:
+        return 'Completado'
+    elif 'proceso' in produccion or 'producción' in produccion:
+        return 'En Proceso'
+    elif 'espera' in produccion:
+        return 'En Espera'
+    elif 'aprobado' in aprobacion or 'confirmado' in aprobacion:
+        # Si está aprobado pero no ha empezado producción
+        return 'Pendiente de Producción'
+    elif 'rechazado' in aprobacion:
+        return 'Rechazado'
+    elif 'revisión' in aprobacion or 'pendiente' in aprobacion:
+        return 'Pendiente de Aprobación'
+    else:
+        return 'Pendiente'
+
+def get_color_estado_kanban(estado):
+    """Devuelve colores para cada estado del KANBAN COMBINADO"""
     colores = {
-        'Pendiente Confirmación': {'color': '#FF6B6B', 'bg_color': '#FFE8E8'},
-        'Pendiente': {'color': '#D63031', 'bg_color': '#FFE8E8'},
-        'Confirmado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
-        'En Proceso': {'color': '#E17055', 'bg_color': '#FFF8E1'},
-        'Completado': {'color': '#00A085', 'bg_color': '#E8F6F3'},
-        'Entregado': {'color': '#6F42C1', 'bg_color': '#F3E8FF'}  # Color púrpura para Entregado
+        'Pendiente de Aprobación': {'color': '#95A5A6', 'bg_color': '#F2F4F4', 'icon': '⏳'},
+        'Rechazado': {'color': '#E74C3C', 'bg_color': '#FDEDEC', 'icon': '❌'},
+        'Pendiente de Producción': {'color': '#F39C12', 'bg_color': '#FEF9E7', 'icon': '📋'},
+        'En Espera': {'color': '#E17055', 'bg_color': '#FFF8E1', 'icon': '⏱️'},
+        'En Proceso': {'color': '#3498DB', 'bg_color': '#EBF5FB', 'icon': '⚙️'},
+        'Completado': {'color': '#27AE60', 'bg_color': '#E8F8F5', 'icon': '✅'},
+        'Entregado': {'color': '#6F42C1', 'bg_color': '#F3E8FF', 'icon': '📦'}
     }
-    return colores.get(estado, colores['Pendiente'])
+    return colores.get(estado, {'color': '#95A5A6', 'bg_color': '#F2F4F4', 'icon': '❓'})
 
 def crear_tarjeta_streamlit(orden):
     """Crea una tarjeta usando solo componentes de Streamlit"""
-    color_estado = get_color_estado(orden['Estado'])
+    estado_kanban = orden.get('Estado_Kanban', 'Pendiente de Aprobación')
+    color_estado = get_color_estado_kanban(estado_kanban)
+    
+    # Información de ambos estados para mostrar en tooltip
+    estado_aprobacion = orden.get('Estado Aprobación', 'No especificado')
+    estado_produccion = orden.get('Estado Producción', 'No especificado')
     
     # Crear un contenedor con estilo
     with st.container():
         # Header de la tarjeta
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown(f"**📦 {orden['Número Orden']}**")
+            st.markdown(f"**{color_estado['icon']} {orden['Número Orden']}**")
             st.markdown(f"### {orden['Cliente']}")
         with col2:
             st.markdown(
-                f"<div style='background-color: {color_estado['color']}; color: white; padding: 4px 8px; border-radius: 20px; text-align: center; font-size: 10px; font-weight: bold;'>{orden['Estado']}</div>", 
+                f"<div style='background-color: {color_estado['color']}; color: white; padding: 4px 8px; border-radius: 20px; text-align: center; font-size: 10px; font-weight: bold;'>{estado_kanban}</div>", 
                 unsafe_allow_html=True
             )
+            # Info pequeña de ambos estados
+            st.caption(f"✓ {estado_aprobacion}")
+            st.caption(f"🛠️ {estado_produccion}")
         
         # Información de la orden
         col_info1, col_info2 = st.columns(2)
         with col_info1:
             st.caption(f"👤 **Vendedor:** {orden.get('Vendedor', 'No especificado')}")
-            st.caption(f"🎨 **Diseño:** {orden.get('Nombre Diseño', 'Sin nombre')}")
+            st.caption(f"🎨 **Diseño:** {orden.get('Nombre del Diseño', 'Sin nombre')}")
         with col_info2:
-            st.caption(f"📅 **Entrega:** {orden.get('Fecha Entrega', 'No especificada')}")
+            st.caption(f"📅 **Entrega:** {orden.get('Fecha Compromiso', 'No especificada')}")
         
-        # Prendas
+        # Prendas y cantidad
+        prendas_info = f"{orden.get('Cantidad Total', '0')} unidades - {orden.get('Prendas', 'No especificadas')}"
         st.markdown(
             f"<div style='background-color: {color_estado['bg_color']}; padding: 8px; border-radius: 6px; border-left: 3px solid {color_estado['color']}; margin: 8px 0;'>"
-            f"<span style='font-size: 11px; color: #636E72; font-weight: bold;'>{orden.get('Prendas', 'No especificadas')}</span>"
+            f"<span style='font-size: 11px; color: #636E72; font-weight: bold;'>{prendas_info}</span>"
             f"</div>", 
             unsafe_allow_html=True
         )
@@ -109,66 +144,81 @@ def crear_tarjeta_streamlit(orden):
         st.markdown("---")
 
 def mostrar_kanban_visual(df_filtrado):
-    """Muestra el tablero Kanban con componentes nativos de Streamlit"""
-    st.subheader("🎯 Tablero Kanban Visual")
+    """Muestra el tablero Kanban con estados combinados"""
+    st.subheader("🎯 Tablero Kanban - Flujo Completo")
     
-    # Estadísticas rápidas - AHORA CON 5 COLUMNAS
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        total = len(df_filtrado)
-        st.metric("Total", total)
-    with col2:
-        pendientes = len(df_filtrado[df_filtrado['Estado'] == 'Pendiente'])
-        st.metric("Pendientes", pendientes)
-    with col3:
-        en_proceso = len(df_filtrado[df_filtrado['Estado'] == 'En Proceso'])
-        st.metric("En Proceso", en_proceso)
-    with col4:
-        completadas = len(df_filtrado[df_filtrado['Estado'] == 'Completado'])
-        st.metric("Completadas", completadas)
-    with col5:
-        entregadas = len(df_filtrado[df_filtrado['Estado'] == 'Entregado'])
-        st.metric("Entregadas", entregadas)
+    # Definir el orden del flujo en el Kanban
+    estados_kanban = [
+        'Pendiente de Aprobación',
+        'Rechazado',
+        'Pendiente de Producción', 
+        'En Espera',
+        'En Proceso',
+        'Completado',
+        'Entregado'
+    ]
     
-    # Definir columnas del Kanban - AHORA CON 4 ESTADOS
-    estados_kanban = ['Pendiente', 'En Proceso', 'Completado', 'Entregado']
-    columns = st.columns(len(estados_kanban))
+    # Filtrar solo los estados que existen en los datos
+    estados_existentes = [e for e in estados_kanban if e in df_filtrado['Estado_Kanban'].unique()]
     
-    for i, estado in enumerate(estados_kanban):
+    # Estadísticas rápidas
+    st.write("### 📊 Resumen por Estado")
+    cols_stats = st.columns(min(len(estados_existentes), 7))
+    
+    for i, estado in enumerate(estados_existentes[:7]):
+        with cols_stats[i]:
+            count = len(df_filtrado[df_filtrado['Estado_Kanban'] == estado])
+            color_estado = get_color_estado_kanban(estado)
+            st.metric(
+                label=estado.split()[-1],  # Mostrar solo la última palabra
+                value=count,
+                delta=None
+            )
+    
+    st.markdown("---")
+    
+    # Crear columnas del Kanban
+    columns = st.columns(len(estados_existentes))
+    
+    for i, estado in enumerate(estados_existentes):
         with columns[i]:
-            color_estado = get_color_estado(estado)
+            color_estado = get_color_estado_kanban(estado)
             
             # Header de la columna
             st.markdown(
                 f"<div style='background-color: {color_estado['color']}; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 16px;'>"
-                f"{estado} ({len(df_filtrado[df_filtrado['Estado'] == estado])})"
+                f"{color_estado['icon']} {estado} ({len(df_filtrado[df_filtrado['Estado_Kanban'] == estado])})"
                 f"</div>", 
                 unsafe_allow_html=True
             )
             
-            # Ordenes en este estado
-            ordenes_estado = df_filtrado[df_filtrado['Estado'] == estado]
+            # Órdenes en este estado
+            ordenes_estado = df_filtrado[df_filtrado['Estado_Kanban'] == estado]
             
             if ordenes_estado.empty:
-                st.info("No hay órdenes en este estado")
+                st.info("No hay órdenes")
             else:
+                # Ordenar por fecha de compromiso
+                if 'Fecha Compromiso' in ordenes_estado.columns:
+                    try:
+                        ordenes_estado = ordenes_estado.sort_values('Fecha Compromiso', na_position='last')
+                    except:
+                        pass
+                
                 for _, orden in ordenes_estado.iterrows():
-                    # Crear tarjeta
                     crear_tarjeta_streamlit(orden)
 
 def mostrar_dashboard_ordenes():
     """Dashboard principal de gestión de órdenes SOLO CON KANBAN"""
     
-    st.title("🏭 Gestión de Órdenes de Bordado")
+    st.title("🏭 Tablero de Producción - Órdenes de Bordado")
     
     # Información de conexión
     with st.expander("🔗 Estado de Conexión", expanded=False):
         if "gsheets" in st.secrets and "ordenes_bordado_sheet_id" in st.secrets["gsheets"]:
-            st.success("✅ Sheet ID configurado correctamente")
-            st.write(f"**Service Account:** {st.secrets['gservice_account']['client_email']}")
-            st.write(f"**Sheet ID:** {st.secrets['gsheets']['ordenes_bordado_sheet_id']}")
+            st.success("✅ Conectado a Google Sheets")
         else:
-            st.error("❌ Sheet ID no configurado en secrets")
+            st.error("❌ Sheet ID no configurado")
     
     # Cargar órdenes
     with st.spinner("🔄 Cargando órdenes desde Google Sheets..."):
@@ -176,57 +226,44 @@ def mostrar_dashboard_ordenes():
     
     if df_ordenes.empty:
         st.info("📭 No hay órdenes registradas aún.")
-        st.info("💡 Usa el formulario web para crear la primera orden.")
         return
     
     # Filtros globales
-    st.subheader("🎛️ Filtros Globales")
+    st.subheader("🎛️ Filtros")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        estados = ["Todos"] + list(df_ordenes['Estado'].unique())
-        estado_filtro = st.selectbox("Filtrar por Estado:", estados, key="filtro_estado")
+        # Filtro por estado del Kanban
+        estados_kanban = ["Todos"] + sorted(df_ordenes['Estado_Kanban'].dropna().unique())
+        estado_filtro = st.selectbox("Por Estado Kanban:", estados_kanban, key="filtro_estado_kanban")
     
     with col2:
-        vendedores = ["Todos"] + list(df_ordenes['Vendedor'].dropna().unique())
-        vendedor_filtro = st.selectbox("Filtrar por Vendedor:", vendedores, key="filtro_vendedor")
+        vendedores = ["Todos"] + sorted(df_ordenes['Vendedor'].dropna().unique())
+        vendedor_filtro = st.selectbox("Por Vendedor:", vendedores, key="filtro_vendedor")
     
     with col3:
-        clientes = ["Todos"] + list(df_ordenes['Cliente'].dropna().unique())
-        cliente_filtro = st.selectbox("Filtrar por Cliente:", clientes, key="filtro_cliente")
+        clientes = ["Todos"] + sorted(df_ordenes['Cliente'].dropna().unique())
+        cliente_filtro = st.selectbox("Por Cliente:", clientes, key="filtro_cliente")
     
     # Aplicar filtros
     df_filtrado = df_ordenes.copy()
     if estado_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Estado'] == estado_filtro]
+        df_filtrado = df_filtrado[df_filtrado['Estado_Kanban'] == estado_filtro]
     if vendedor_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Vendedor'] == vendedor_filtro]
     if cliente_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Cliente'] == cliente_filtro]
     
-    # MOSTRAR SOLO EL KANBAN (sin pestañas)
+    # Mostrar Kanban
     mostrar_kanban_visual(df_filtrado)
     
-    # Botones de acción rápida
+    # Botones de acción
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    col_btn1, col_btn2 = st.columns([3, 1])
     
-    with col1:
-        if st.button("🔄 Actualizar Todos los Datos", use_container_width=True):
+    with col_btn1:
+        st.info(f"📊 Mostrando {len(df_filtrado)} de {len(df_ordenes)} órdenes")
+    
+    with col_btn2:
+        if st.button("🔄 Actualizar Datos", use_container_width=True):
             st.rerun()
-    
-    with col2:
-        if st.button("📊 Exportar a Excel", use_container_width=True):
-            timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"ordenes_bordado_{timestamp}.xlsx"
-            df_filtrado.to_excel(filename, index=False)
-            st.success(f"✅ Datos exportados a {filename}")
-    
-    with col3:
-        if st.button("🔍 Debug Info", use_container_width=True):
-            with st.expander("🔍 Información de Debug"):
-                st.write(f"**Columnas encontradas:** {list(df_ordenes.columns)}")
-                st.write(f"**Total de órdenes:** {len(df_ordenes)}")
-                st.write(f"**Órdenes filtradas:** {len(df_filtrado)}")
-                st.write("**Primeras filas:**")
-                st.dataframe(df_ordenes.head(2))
