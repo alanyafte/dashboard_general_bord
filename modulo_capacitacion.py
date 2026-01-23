@@ -5,14 +5,10 @@ from datetime import datetime
 import plotly.graph_objects as go
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import hashlib
+
 
 # Configuración de Google Drive API (si quieres mostrar archivos reales)
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-
-def obtener_hash_modulo():
-    """Devuelve el hash para el módulo de capacitación"""
-    return "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b"  # Hash para "capacitacion2024"
 
 def mostrar_dashboard_capacitacion():
     """Dashboard principal del módulo de capacitación"""
