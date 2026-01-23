@@ -4,7 +4,7 @@ from modulo_clima_laboral import mostrar_dashboard_clima_laboral
 from modulo_produccion import mostrar_dashboard_produccion
 from modulo_satisfaccion_cliente import mostrar_dashboard_satisfaccion
 from modulo_ordenes_bordado import mostrar_dashboard_ordenes
-from modulo_capacitacion import mostrar_modulo_capacitacion
+from modulo_capacitacion import mostrar_dashboard_capacitacion
 #from modulo_formulario_confirmacion import mostrar_formulario_confirmacion  # ✅ NUEVO MÓDULO
 
 
