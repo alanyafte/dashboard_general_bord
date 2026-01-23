@@ -93,7 +93,7 @@ else:
         mostrar_dashboard_ordenes()
 
     elif modulo_seleccionado == "🎓 Capacitación":  # ✅ NUEVA LÓGICA
-        mostrar_formulario_confirmacion()
+        mostrar_dashboard_capacitacion()
         
     #elif modulo_seleccionado == "📝 Crear/Confirmar Órdenes":  # ✅ NUEVA LÓGICA
         #mostrar_formulario_confirmacion()
